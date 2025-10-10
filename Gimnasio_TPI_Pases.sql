@@ -7,8 +7,7 @@
   Motor: SQL Server
 ============================================================
 
-
-/* ==========================================================
+==========================================================
    1) TABLAS
 ========================================================== */
 create database TPIGimnasio ;
@@ -20,7 +19,7 @@ CREATE TABLE dbo.Socios (
     Apellido  NVARCHAR(100) NOT NULL,
     Nombre    NVARCHAR(100) NOT NULL,
     Email     NVARCHAR(150) NOT NULL UNIQUE,
-    Estado    CHAR(1) NOT NULL CONSTRAINT CK_Socios_Estado CHECK (Estado IN ('A','I'))  -- A=Activo, I=Inactivo
+    Estado    BIT NOT NULL CONSTRAINT DF_Socios_Estado DEFAULT 1  -- 1=Activo, 0=Inactivo
 );
 
 CREATE TABLE dbo.TiposPase (
@@ -68,3 +67,28 @@ CREATE TABLE dbo.Asistencias (
     CONSTRAINT FK_Asis_Socio FOREIGN KEY (IDSocio) REFERENCES dbo.Socios(IDSocio) ON DELETE CASCADE
 );
 
+/*==========================================================
+   2) VISTAS
+========================================================== */
+
+Create View vw_PasesProximosVencer as
+Select P.IDPase, S.IDSocio, S.Nombre+' '+S.Apellido as Socio, TP.Nombre as TipoPase, P.FechaFin,
+DATEDIFF(DAY, CAST(GETDATE() as DATE),P.FechaFin) as DiasRestantes
+From Pases P
+Inner Join Socios S on S.IDSocio=P.IDSocio
+Inner Join TiposPase TP on Tp.IDTipo=P.IDTipo
+Where P.Estado=1 and P.FechaFin>=CAST(GETDATE() AS DATE)
+and p.FechaFin <= DATEADD(DAY, 7, CAST(GETDATE() AS DATE));
+
+Create View vw_PasesVigentes as
+Select P.IDPase, P.IDSocio, S.Nombre + ' ' + S.Apellido AS NombreCompleto,
+    TP.Nombre AS TipoPase, P.FechaInicio, P.FechaFin, P.VecesMax, P.VecesUsadas,
+    CASE 
+        WHEN P.VecesMax IS NULL THEN NULL 
+        ELSE (P.VecesMax - P.VecesUsadas) 
+    END AS UsosRestantes
+From Pases AS P
+Inner Join Socios S on S.IDSocio = P.IDSocio
+Inner Join TiposPase TP on TP.IDTipo = P.IDTipo
+Where 
+    P.Estado = 1 and CAST(GETDATE() AS DATE) Between P.FechaInicio and P.FechaFin;
