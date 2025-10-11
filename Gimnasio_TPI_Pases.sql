@@ -70,7 +70,9 @@ CREATE TABLE dbo.Asistencias (
 /*==========================================================
    2) VISTAS
 ========================================================== */
+
 go
+
 Create View vw_PasesProximosVencer as
 Select P.IDPase, S.IDSocio, S.Nombre+' '+S.Apellido as Socio, TP.Nombre as TipoPase, P.FechaFin,
 DATEDIFF(DAY, CAST(GETDATE() as DATE),P.FechaFin) as DiasRestantes
@@ -79,7 +81,9 @@ Inner Join Socios S on S.IDSocio=P.IDSocio
 Inner Join TiposPase TP on Tp.IDTipo=P.IDTipo
 Where P.Estado=1 and P.FechaFin>=CAST(GETDATE() AS DATE)
 and p.FechaFin <= DATEADD(DAY, 7, CAST(GETDATE() AS DATE));
+
 go
+
 Create View vw_PasesVigentes as
 Select P.IDPase, P.IDSocio, S.Nombre + ' ' + S.Apellido AS NombreCompleto,
     TP.Nombre AS TipoPase, P.FechaInicio, P.FechaFin, P.VecesMax, P.VecesUsadas,
@@ -91,5 +95,7 @@ From Pases AS P
 Inner Join Socios S on S.IDSocio = P.IDSocio
 Inner Join TiposPase TP on TP.IDTipo = P.IDTipo
 Where 
+
     P.Estado = 1 and CAST(GETDATE() AS DATE) Between P.FechaInicio and P.FechaFin;
     go
+
