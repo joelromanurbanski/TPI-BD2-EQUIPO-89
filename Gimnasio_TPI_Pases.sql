@@ -109,6 +109,35 @@ WHERE P.Estado = 1
   AND CAST(GETDATE() AS DATE) BETWEEN P.FechaInicio AND P.FechaFin;
 GO
 
+-- Clases sin cupos disponibles
+CREATE VIEW vw_ClasesSinCupos AS
+SELECT 
+    c.IDClase,
+    c.NombreClase,
+    c.CupoMaximo,
+    COUNT(i.IDInscripcion) AS Inscritos,
+    c.FechaHora
+FROM Clases c
+LEFT JOIN Inscripciones i ON i.IDClase = c.IDClase
+GROUP BY c.IDClase, c.NombreClase, c.CupoMaximo, c.FechaHora
+HAVING COUNT(i.IDInscripcion) >= c.CupoMaximo;
+GO
+
+-- Asistencias mensuales (resumen del mes actual)
+CREATE VIEW vw_AsistenciasMensuales AS
+SELECT 
+    s.IDSocio,
+    s.Apellido + ' ' + s.Nombre AS Socio,
+    COUNT(a.IDAsistencia) AS CantidadAsistencias,
+    DATENAME(MONTH, GETDATE()) + ' ' + CAST(YEAR(GETDATE()) AS VARCHAR(4)) AS Periodo
+FROM Socios s
+LEFT JOIN Asistencias a 
+       ON s.IDSocio = a.IDSocio
+      AND MONTH(a.FechaHoraIng) = MONTH(GETDATE())
+      AND YEAR(a.FechaHoraIng) = YEAR(GETDATE())
+GROUP BY s.IDSocio, s.Apellido, s.Nombre;
+GO
+
 /* ============================
    PROCEDIMIENTOS ALMACENADOS
 ============================ */
@@ -228,4 +257,3 @@ Print Error_Message();
 End Catch
 End
 Go
-
