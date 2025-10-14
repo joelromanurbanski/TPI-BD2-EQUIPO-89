@@ -137,7 +137,28 @@ LEFT JOIN Asistencias a
       AND YEAR(a.FechaHoraIng) = YEAR(GETDATE())
 GROUP BY s.IDSocio, s.Apellido, s.Nombre;
 GO
-
+ -- Asistencia hoy :  liste todos los socios que fueron
+CREATE VIEW vw_AsistenciasHoy AS
+SELECT 
+    A.IDAsistencia,
+    A.IDSocio,
+    A.FechaHoraIng,
+    S.Apellido + ' ' + S.Nombre AS NombreCompleto
+FROM Asistencias AS A
+JOIN Socios AS S ON S.IDSocio = A.IDSocio
+WHERE CONVERT(date, A.FechaHoraIng) = CONVERT(date, GETDATE());
+GO
+-- Socios Activos 
+CREATE VIEW vw_SociosActivos AS
+SELECT 
+    IDSocio,
+    DNI,
+    Apellido,
+    Nombre,
+    Email
+FROM Socios
+WHERE Estado = 1;
+GO
 /* ============================
    PROCEDIMIENTOS ALMACENADOS
 ============================ */
