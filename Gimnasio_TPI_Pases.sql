@@ -376,6 +376,64 @@ BEGIN
     END CATCH
 END
 GO
+
+-- Buscar Socio por DNI
+CREATE PROCEDURE sp_BuscarSocioPorDNI
+    @DNI CHAR(8)
+AS
+BEGIN
+    BEGIN TRY
+        IF NOT EXISTS (SELECT 1 FROM Socios WHERE DNI = @DNI)
+        BEGIN
+            PRINT 'No se encontró ningún socio con ese DNI.';
+            RETURN;
+        END
+
+        SELECT 
+            IDSocio,
+            DNI,
+            Apellido + ' ' + Nombre AS NombreCompleto,
+            Email,
+            CASE WHEN Estado = 1 THEN 'Activo' ELSE 'Inactivo' END AS Estado
+        FROM Socios
+        WHERE DNI = @DNI;
+
+    END TRY
+    BEGIN CATCH
+        PRINT 'Error al buscar el socio.';
+        PRINT ERROR_MESSAGE();
+    END CATCH
+END
+GO
+
+-- Listar Clases Disponibles
+CREATE PROCEDURE sp_ListarClasesDisponibles
+AS
+BEGIN
+    BEGIN TRY
+        SELECT 
+            c.IDClase,
+            c.NombreClase,
+            c.CupoMaximo,
+            COUNT(i.IDInscripcion) AS Inscriptos,
+            (c.CupoMaximo - COUNT(i.IDInscripcion)) AS LugaresDisponibles,
+            c.FechaHora
+        FROM Clases c
+        LEFT JOIN Inscripciones i ON i.IDClase = c.IDClase
+        GROUP BY c.IDClase, c.NombreClase, c.CupoMaximo, c.FechaHora
+        HAVING COUNT(i.IDInscripcion) < c.CupoMaximo
+        ORDER BY c.FechaHora;
+
+        PRINT 'Listado de clases con cupos disponibles generado correctamente.';
+
+    END TRY
+    BEGIN CATCH
+        PRINT 'Error al listar las clases disponibles.';
+        PRINT ERROR_MESSAGE();
+    END CATCH
+END
+GO
+
 -- otra forma de registrar y activar un socio (acordarse el lugar de los parametros donde colocarlo):
 EXEC sp_ActivarNuevoSocio 3,'carracedo','sebas','scarracedo@example.com';
 
