@@ -279,6 +279,174 @@ End Catch
 End
 Go
 
+CREATE PROCEDURE sp_ActivarNuevoPase
+    @IDSocio INT,
+    @IDTipo INT,
+    @FechaInicio DATE,
+    @FechaFin DATE
+AS
+BEGIN
+    BEGIN TRY
+        DECLARE @VecesMax INT;
+
+        -- Validar socio activo
+        IF NOT EXISTS (SELECT 1 FROM Socios WHERE IDSocio = @IDSocio AND Estado = 1)
+        BEGIN
+            PRINT 'Error: El socio no existe o no está activo.';
+            RETURN;
+        END
+
+        -- Validar tipo de pase
+        IF NOT EXISTS (SELECT 1 FROM TiposPase WHERE IDTipo = @IDTipo)
+        BEGIN
+            PRINT 'Error: Tipo de pase no válido.';
+            RETURN;
+        END
+
+        -- Validar fechas
+        IF @FechaInicio IS NULL OR @FechaFin IS NULL OR @FechaInicio > @FechaFin
+        BEGIN
+            PRINT 'Error: Fechas de inicio/fin inválidas.';
+            RETURN;
+        END
+
+        -- Asignar cantidad de usos máximos según tipo
+        SELECT @VecesMax = CASE UPPER(Nombre)
+                              WHEN 'DIARIO' THEN 1
+                              WHEN 'OCHO' THEN 8
+                              WHEN 'LIBRE' THEN NULL
+                           END
+        FROM TiposPase
+        WHERE IDTipo = @IDTipo;
+
+        -- Desactivar otros pases vigentes del socio (solo debe haber uno activo)
+        UPDATE Pases
+        SET Estado = 0
+        WHERE IDSocio = @IDSocio AND Estado = 1;
+
+        -- Insertar nuevo pase
+        INSERT INTO Pases (IDSocio, IDTipo, FechaInicio, FechaFin, VecesMax, VecesUsadas, Estado)
+        VALUES (@IDSocio, @IDTipo, @FechaInicio, @FechaFin, @VecesMax, 0, 1);
+
+        PRINT 'Nuevo pase activado correctamente.';
+    END TRY
+
+    BEGIN CATCH
+        PRINT 'Error al activar el nuevo pase.';
+        PRINT ERROR_MESSAGE();
+    END CATCH
+END
+GO
+  CREATE PROCEDURE sp_ActivarNuevoSocio
+    @DNI CHAR(8),
+    @Apellido NVARCHAR(100),
+    @Nombre NVARCHAR(100),
+    @Email NVARCHAR(150)
+AS
+BEGIN
+    BEGIN TRY
+        -- Validaciones
+        IF @DNI IS NULL OR @Apellido IS NULL OR @Nombre IS NULL OR @Email IS NULL
+        BEGIN
+            PRINT 'Error: Todos los campos son obligatorios.';
+            RETURN;
+        END
+
+        IF EXISTS (SELECT 1 FROM Socios WHERE DNI = @DNI)
+        BEGIN
+            PRINT 'Error: Ya existe un socio con ese DNI.';
+            RETURN;
+        END
+
+        IF EXISTS (SELECT 1 FROM Socios WHERE Email = @Email)
+        BEGIN
+            PRINT 'Error: Ya existe un socio con ese Email.';
+            RETURN;
+        END
+
+        -- Inserción del socio
+        INSERT INTO Socios (DNI, Apellido, Nombre, Email, Estado)
+        VALUES (@DNI, @Apellido, @Nombre, @Email, 1);
+
+        PRINT 'Socio registrado y activado correctamente.';
+    END TRY
+
+    BEGIN CATCH
+        PRINT 'Error al registrar el nuevo socio.';
+        PRINT ERROR_MESSAGE();
+    END CATCH
+END
+GO
+
+-- Buscar Socio por DNI
+CREATE PROCEDURE sp_BuscarSocioPorDNI
+    @DNI CHAR(8)
+AS
+BEGIN
+    BEGIN TRY
+        IF NOT EXISTS (SELECT 1 FROM Socios WHERE DNI = @DNI)
+        BEGIN
+            PRINT 'No se encontró ningún socio con ese DNI.';
+            RETURN;
+        END
+
+        SELECT 
+            IDSocio,
+            DNI,
+            Apellido + ' ' + Nombre AS NombreCompleto,
+            Email,
+            CASE WHEN Estado = 1 THEN 'Activo' ELSE 'Inactivo' END AS Estado
+        FROM Socios
+        WHERE DNI = @DNI;
+
+    END TRY
+    BEGIN CATCH
+        PRINT 'Error al buscar el socio.';
+        PRINT ERROR_MESSAGE();
+    END CATCH
+END
+GO
+
+-- Listar Clases Disponibles
+CREATE PROCEDURE sp_ListarClasesDisponibles
+AS
+BEGIN
+    BEGIN TRY
+        SELECT 
+            c.IDClase,
+            c.NombreClase,
+            c.CupoMaximo,
+            COUNT(i.IDInscripcion) AS Inscriptos,
+            (c.CupoMaximo - COUNT(i.IDInscripcion)) AS LugaresDisponibles,
+            c.FechaHora
+        FROM Clases c
+        LEFT JOIN Inscripciones i ON i.IDClase = c.IDClase
+        GROUP BY c.IDClase, c.NombreClase, c.CupoMaximo, c.FechaHora
+        HAVING COUNT(i.IDInscripcion) < c.CupoMaximo
+        ORDER BY c.FechaHora;
+
+        PRINT 'Listado de clases con cupos disponibles generado correctamente.';
+
+    END TRY
+    BEGIN CATCH
+        PRINT 'Error al listar las clases disponibles.';
+        PRINT ERROR_MESSAGE();
+    END CATCH
+END
+GO
+
+-- otra forma de registrar y activar un socio (acordarse el lugar de los parametros donde colocarlo):
+EXEC sp_ActivarNuevoSocio 3,'carracedo','sebas','scarracedo@example.com';
+
+-- asi se registra y activa un socio: 
+EXEC sp_ActivarNuevoSocio 
+    @DNI = '40205305',
+    @Apellido = N'carracedo',
+    @Nombre = N'sebas',
+    @Email = N'scarra@example.com';
+    -- asi se verifica que aparezcan todos :
+SELECT * FROM Socios;
+
 /* ============================
    TRIGGERS
 ============================ */
