@@ -278,3 +278,44 @@ Print Error_Message();
 End Catch
 End
 Go
+
+/* ============================
+   TRIGGERS
+============================ */
+
+Create Trigger tr_Socio_NoRepetirDNI on Socios
+After Insert
+As
+If Exists(Select 1 From inserted i 
+   Join Socios s on s.DNI=i.DNI and s.IDSocio<>i.IDSocio)
+Begin 
+	Raiserror('El DNI ya existe.',16,1);
+	Rollback Transaction;
+End;
+Go
+
+Create Trigger tr_BajaLogicaSocios
+On Socios
+after Update
+As
+-- Solo actua si se cambio Estado a 0
+IF EXISTS (SELECT 1 FROM inserted i JOIN deleted d ON i.IdSocio=d.IdSocio 
+		   WHERE i.Estado=0 AND ISNULL(d.Estado,1)<>0)
+Begin
+  Update p
+    Set p.Estado = 0
+  From Pases p
+  Inner Join inserted i on i.IdSocio = p.IdSocio
+  Where i.Estado = 0 AND p.Estado = 1;
+End;
+Go
+
+Create Trigger tr_Pases_Vencidos On Pases
+After Update
+As
+Update p
+Set p.Estado = 0
+From Pases p
+Where p.Estado = 1
+  And p.FechaFin < GETDATE();
+Go
