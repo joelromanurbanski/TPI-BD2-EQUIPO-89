@@ -450,7 +450,7 @@ SELECT * FROM Socios;
 /* ============================
    TRIGGERS
 ============================ */
-
+go
 Create Trigger tr_Socio_NoRepetirDNI on Socios
 After Insert
 As
@@ -487,3 +487,66 @@ From Pases p
 Where p.Estado = 1
   And p.FechaFin < GETDATE();
 Go
+--TR_Pases_AI Objetivo: desactivar automáticamente cualquier otro pase vigente que tenga el socio cuando se inserta un nuevo pase.
+CREATE TRIGGER TR_Pases_AI
+ON Pases
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    UPDATE Pases
+    SET Estado = 0
+    WHERE IDSocio IN (SELECT IDSocio FROM inserted)
+      AND IDPase NOT IN (SELECT IDPase FROM inserted)
+      AND Estado = 1;
+
+    PRINT 'Se desactivaron otros pases vigentes del socio al crear uno nuevo.';
+END;
+GO
+
+--TR_Pases_Vencidos Objetivo: actualizar automáticamente el campo Estado de los pases vencidos
+ 
+CREATE TRIGGER TR_Actualizar_Pases_Vencidos
+ON Pases
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    UPDATE Pases
+    SET Estado = 0
+    WHERE FechaFin < CAST(GETDATE() AS DATE)
+      AND Estado = 1;
+
+    PRINT 'Se actualizaron los pases vencidos.';
+END;
+GO
+--TR_Pases_ValidacionGeneral Objetivo: evitar que se inserten o actualicen pases con fechas inconsistentes (por ejemplo, FechaFin anterior a FechaInicio).
+CREATE TRIGGER TR_Pases_ValidacionGeneral
+ON Pases
+INSTEAD OF INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Validar que las fechas sean correctas
+    IF EXISTS (
+        SELECT 1 
+        FROM inserted
+        WHERE FechaFin <= FechaInicio
+    )
+    BEGIN
+        PRINT 'Error: la fecha de fin debe ser posterior a la fecha de inicio.';
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+
+    -- Si está todo bien, realizar la operación normalmente
+    INSERT INTO Pases (IDSocio, IDTipo, FechaInicio, FechaFin, VecesMax, VecesUsadas, Estado)
+    SELECT IDSocio, IDTipo, FechaInicio, FechaFin, VecesMax, VecesUsadas, Estado
+    FROM inserted;
+
+    PRINT 'Validación correcta: pase insertado o actualizado exitosamente.';
+END;
+GO
