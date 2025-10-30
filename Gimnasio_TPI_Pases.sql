@@ -1,70 +1,149 @@
-/* ======================================================
-   BASE DE DATOS: TPIGimnasio
-   Motor: SQL Server
-====================================================== */
+-- ======================================================
+--  TPIGimnasio
+-- ======================================================
 
-DROP DATABASE IF EXISTS TPIGimnasio;
+-- 0) RECREAR BASE
+IF DB_ID('TPIGimnasio') IS NOT NULL
+BEGIN
+    ALTER DATABASE TPIGimnasio SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE TPIGimnasio;
+END
 GO
 CREATE DATABASE TPIGimnasio;
 GO
 USE TPIGimnasio;
 GO
 
-/* ============================
-   TABLAS
-============================ */
+-- ======================================================
+-- 1) TABLAS
+-- ======================================================
 
-CREATE TABLE Socios (
-    IDSocio   INT IDENTITY(1,1) PRIMARY KEY,
-    DNI       CHAR(8) NOT NULL UNIQUE,
-    Apellido  NVARCHAR(100) NOT NULL,
-    Nombre    NVARCHAR(100) NOT NULL,
-    Email     NVARCHAR(150) NOT NULL UNIQUE,
-    Estado    BIT NOT NULL CONSTRAINT DF_Socios_Estado DEFAULT 1  -- 1=Activo, 0=Inactivo
-);
-
-CREATE TABLE TiposPase (
-    IDTipo   INT IDENTITY(1,1) PRIMARY KEY,
-    Nombre   VARCHAR(10) NOT NULL UNIQUE   -- 'DIARIO', 'OCHO', 'LIBRE'
-);
-
-CREATE TABLE Pases (
-    IDPase       INT IDENTITY(1,1) PRIMARY KEY,
-    IDSocio      INT NOT NULL,
-    IDTipo       INT NOT NULL,
-    FechaInicio  DATE NOT NULL,
-    FechaFin     DATE NOT NULL,
-    VecesMax     INT NULL,         -- NULL para pase libre
-    VecesUsadas  INT NOT NULL DEFAULT 0,
-    Estado       BIT NOT NULL CONSTRAINT DF_Pases_Estado DEFAULT 1, -- 1=Activo, 0=Inactivo
-    CONSTRAINT FK_Pases_Socio FOREIGN KEY (IDSocio) REFERENCES Socios(IDSocio) ON DELETE CASCADE,
-    CONSTRAINT FK_Pases_Tipo  FOREIGN KEY (IDTipo)  REFERENCES TiposPase(IDTipo)
-);
-
-CREATE TABLE Clases (
-    IDClase      INT IDENTITY(1,1) PRIMARY KEY,
-    NombreClase  NVARCHAR(100) NOT NULL,
-    CupoMaximo   INT NOT NULL CONSTRAINT CK_Clases_Cupo CHECK (CupoMaximo > 0),
-    FechaHora    DATETIME NOT NULL
-);
-
-CREATE TABLE Inscripciones (
-    IDInscripcion INT IDENTITY(1,1) PRIMARY KEY,
-    IDSocio       INT NOT NULL,
-    IDClase       INT NOT NULL,
-    FechaAlta     DATETIME NOT NULL DEFAULT(GETDATE()),
-    CONSTRAINT UQ_Inscripcion UNIQUE (IDSocio, IDClase),
-    CONSTRAINT FK_Ins_Socio FOREIGN KEY (IDSocio) REFERENCES Socios(IDSocio) ON DELETE CASCADE,
-    CONSTRAINT FK_Ins_Clase FOREIGN KEY (IDClase) REFERENCES Clases(IDClase) ON DELETE CASCADE
-);
-
-CREATE TABLE Asistencias (
-    IDAsistencia   INT IDENTITY(1,1) PRIMARY KEY,
-    IDSocio        INT NOT NULL,
-    FechaHoraIng   DATETIME NOT NULL DEFAULT(GETDATE()),
-    CONSTRAINT FK_Asis_Socio FOREIGN KEY (IDSocio) REFERENCES Socios(IDSocio) ON DELETE CASCADE
+-- 1.1) PERSONA
+CREATE TABLE dbo.Persona(
+    IdPersona INT IDENTITY(1,1) PRIMARY KEY,
+    DNI       CHAR(8)        NOT NULL UNIQUE,
+    Apellido  NVARCHAR(100)  NOT NULL,
+    Nombre    NVARCHAR(100)  NOT NULL
 );
 GO
+
+-- 1.2) SOCIOS
+CREATE TABLE dbo.Socios(
+    IDSocio         INT IDENTITY(1,1) PRIMARY KEY,
+    IdPersona       INT             NOT NULL,
+    Email           NVARCHAR(150)   NOT NULL,
+    Estado          BIT             NOT NULL CONSTRAINT DF_Socios_Estado DEFAULT(1),
+    FechaNacimiento DATE            NULL,
+    FechaAlta       DATETIME        NOT NULL CONSTRAINT DF_Socios_FechaAlta DEFAULT(GETDATE()),
+    CONSTRAINT UQ_Socios_Email UNIQUE(Email),
+    CONSTRAINT FK_Socios_Persona FOREIGN KEY(IdPersona) REFERENCES dbo.Persona(IdPersona)
+);
+GO
+
+-- 1.3) PROFESORES
+CREATE TABLE dbo.Profesores(
+    IdProfesor   INT IDENTITY(1,1) PRIMARY KEY,
+    IdPersona    INT             NOT NULL,
+    Especialidad NVARCHAR(100)   NULL,
+    Estado       BIT             NOT NULL CONSTRAINT DF_Profesores_Estado DEFAULT(1),
+    FechaAlta    DATETIME        NOT NULL CONSTRAINT DF_Profesores_FechaAlta DEFAULT(GETDATE()),
+    CONSTRAINT FK_Profesores_Persona FOREIGN KEY(IdPersona) REFERENCES dbo.Persona(IdPersona)
+);
+GO
+
+-- 1.4) TIPOS DE PASE
+CREATE TABLE dbo.TiposPase(
+    IDTipo  INT IDENTITY(1,1) PRIMARY KEY,
+    Nombre  NVARCHAR(100) NOT NULL UNIQUE,
+    Precio  DECIMAL(10,2) NOT NULL CONSTRAINT DF_TiposPase_Precio DEFAULT(0)
+);
+GO
+
+-- 1.5) PASES
+CREATE TABLE dbo.Pases(
+    IDPase      INT IDENTITY(1,1) PRIMARY KEY,
+    IDSocio     INT          NOT NULL,
+    IDTipo      INT          NOT NULL,
+    FechaInicio DATE         NOT NULL,
+    FechaFin    DATE         NOT NULL,
+    VecesMax    INT          NULL,
+    VecesUsadas INT          NOT NULL CONSTRAINT DF_Pases_VecesUsadas DEFAULT(0),
+    Estado      BIT          NOT NULL CONSTRAINT DF_Pases_Estado DEFAULT(1),
+    CONSTRAINT FK_Pases_Socio FOREIGN KEY(IDSocio) REFERENCES dbo.Socios(IDSocio),
+    CONSTRAINT FK_Pases_Tipo  FOREIGN KEY(IDTipo)  REFERENCES dbo.TiposPase(IDTipo)
+);
+GO
+
+-- 1.6) PASES HISTORIAL
+CREATE TABLE dbo.PasesHistorial(
+    IdHist      INT IDENTITY(1,1) PRIMARY KEY,
+    IDPase      INT          NOT NULL,
+    IDSocio     INT          NOT NULL,
+    IDTipo      INT          NOT NULL,
+    FechaInicio DATE         NOT NULL,
+    FechaFin    DATE         NOT NULL,
+    VecesMax    INT          NULL,
+    VecesUsadas INT          NOT NULL,
+    Estado      BIT          NOT NULL,
+    Accion      NVARCHAR(50) NOT NULL,   -- 'INSERT'/'UPDATE'/'VENCER', etc.
+    FechaEvento DATETIME     NOT NULL CONSTRAINT DF_PasesHistorial_Fecha DEFAULT(GETDATE()),
+    CONSTRAINT FK_PH_Pase  FOREIGN KEY(IDPase)  REFERENCES dbo.Pases(IDPase),
+    CONSTRAINT FK_PH_Socio FOREIGN KEY(IDSocio) REFERENCES dbo.Socios(IDSocio),
+    CONSTRAINT FK_PH_Tipo  FOREIGN KEY(IDTipo)  REFERENCES dbo.TiposPase(IDTipo)
+);
+GO
+
+-- 1.7) CLASE MAESTRA
+CREATE TABLE dbo.ClaseMaestra(
+    IdClaseMaestra INT IDENTITY(1,1) PRIMARY KEY,
+    Nombre         NVARCHAR(100) NOT NULL UNIQUE,
+    Descripcion    NVARCHAR(200) NULL,
+    Activa         BIT           NOT NULL CONSTRAINT DF_ClaseMaestra_Activa DEFAULT(1)
+);
+GO
+
+-- 1.8) CLASE INSTANCIA
+CREATE TABLE dbo.ClaseInstancia(
+    IdClase        INT IDENTITY(1,1) PRIMARY KEY,
+    IdClaseMaestra INT      NOT NULL,
+    Fecha          DATE     NOT NULL,
+    HoraInicio     TIME     NOT NULL,
+    HoraFin        TIME     NOT NULL,
+    Cupo           INT      NOT NULL CHECK (Cupo > 0),
+    IdProfesor     INT      NULL,
+    Activa         BIT      NOT NULL CONSTRAINT DF_ClaseInstancia_Activa DEFAULT(1),
+    CONSTRAINT FK_CI_Maestra  FOREIGN KEY(IdClaseMaestra) REFERENCES dbo.ClaseMaestra(IdClaseMaestra),
+    CONSTRAINT FK_CI_Profesor FOREIGN KEY(IdProfesor)     REFERENCES dbo.Profesores(IdProfesor)
+);
+GO
+
+-- 1.9) INSCRIPCIONES
+CREATE TABLE dbo.Inscripciones(
+    IDInscripcion    INT IDENTITY(1,1) PRIMARY KEY,
+    IDSocio          INT          NOT NULL,
+    IdClaseInstancia INT          NOT NULL,
+    FechaAlta        DATETIME     NOT NULL CONSTRAINT DF_Inscripciones_FechaAlta DEFAULT(GETDATE()),
+    CONSTRAINT FK_Ins_Socio          FOREIGN KEY(IDSocio)          REFERENCES dbo.Socios(IDSocio),
+    CONSTRAINT FK_Ins_ClaseInstancia FOREIGN KEY(IdClaseInstancia) REFERENCES dbo.ClaseInstancia(IdClase),
+    CONSTRAINT UQ_Inscripciones_SocioClase UNIQUE(IDSocio, IdClaseInstancia)
+);
+GO
+
+-- 1.10) ASISTENCIAS
+CREATE TABLE dbo.Asistencias(
+    IDAsistencia INT IDENTITY(1,1) PRIMARY KEY,
+    IDSocio      INT          NOT NULL,
+    FechaHoraIng DATETIME     NOT NULL CONSTRAINT DF_Asistencias_Fecha DEFAULT(GETDATE()),
+    CONSTRAINT FK_Asistencias_Socio FOREIGN KEY(IDSocio) REFERENCES dbo.Socios(IDSocio)
+);
+GO
+
+-- Índices útiles
+CREATE INDEX IX_Pases_Socio_Fecha ON dbo.Pases(IDSocio, FechaInicio, FechaFin);
+GO
+CREATE INDEX IX_Asistencias_Socio_Fecha ON dbo.Asistencias(IDSocio, FechaHoraIng);
+GO
+
 
 /* ============================
    VISTAS
@@ -550,3 +629,5 @@ BEGIN
     PRINT 'Validación correcta: pase insertado o actualizado exitosamente.';
 END;
 GO
+
+
