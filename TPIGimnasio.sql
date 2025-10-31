@@ -629,5 +629,3 @@ BEGIN
     PRINT 'Validación correcta: pase insertado o actualizado exitosamente.';
 END;
 GO
-
-
