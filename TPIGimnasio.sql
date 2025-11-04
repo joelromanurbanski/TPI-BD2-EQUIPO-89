@@ -725,3 +725,27 @@ BEGIN
 END;
 GO
 
+/* ============================
+   MODIFICACIONES A LAS TABLAS
+============================ */
+
+ALTER TABLE Persona
+ADD Direccion NVARCHAR(200),
+    FechaNacimiento DATE,
+    Email NVARCHAR(150),
+    EstadoCivil NVARCHAR(50);
+GO
+
+-- Agregar columna Observaciones
+ALTER TABLE Socios
+ADD Observaciones NVARCHAR(300);
+GO
+
+-- Eliminar columnas que ahora están en Persona
+ALTER TABLE Socios
+DROP COLUMN Email;
+GO 
+
+ALTER TABLE Socios
+DROP COLUMN FechaNacimiento;
+GO
