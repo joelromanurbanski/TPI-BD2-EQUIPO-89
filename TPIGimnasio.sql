@@ -749,3 +749,14 @@ GO
 ALTER TABLE Socios
 DROP COLUMN FechaNacimiento;
 GO
+
+--Cambiar nombres a las tablas
+EXEC sp_rename 'TiposPase', 'Pase';
+GO
+
+EXEC sp_rename 'Pases', 'PasePorSocio';
+GO
+
+--Cambiar nombre de columna
+EXEC sp_rename 'PasesHistorial.FechaEvento', 'FechaRenovacion', 'COLUMN';
+GO
