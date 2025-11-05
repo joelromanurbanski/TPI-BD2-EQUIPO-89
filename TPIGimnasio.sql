@@ -760,3 +760,10 @@ GO
 --Cambiar nombre de columna
 EXEC sp_rename 'PasesHistorial.FechaEvento', 'FechaRenovacion', 'COLUMN';
 GO
+
+USE TPIGimnasio;
+GO
+ALTER TABLE dbo.PasePorSocio
+ADD CONSTRAINT CK_PPS_UsosNoSuperaMax
+CHECK (VecesMax IS NULL OR VecesUsadas <= VecesMax);
+GO
