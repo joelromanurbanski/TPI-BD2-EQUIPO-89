@@ -767,3 +767,41 @@ ALTER TABLE dbo.PasePorSocio
 ADD CONSTRAINT CK_PPS_UsosNoSuperaMax
 CHECK (VecesMax IS NULL OR VecesUsadas <= VecesMax);
 GO
+
+ALTER TABLE PasePorSocio ADD FechaRenovacion DATE NULL;
+DROP TABLE PasesHistorial;
+
+CREATE TABLE HistorialMedico (
+    IdHistorial INT IDENTITY PRIMARY KEY,
+    IdSocio INT NOT NULL,
+    FechaControl DATE NOT NULL DEFAULT GETDATE(),
+    TipoControl NVARCHAR(100) NOT NULL,
+    Resultado NVARCHAR(200),
+    Observaciones NVARCHAR(200),
+    CONSTRAINT FK_HistorialMedico_Socio FOREIGN KEY (IdSocio)
+        REFERENCES Socios(IdSocio)
+);
+
+ALTER TABLE Asistencias
+DROP CONSTRAINT FK_Asistencias_Socio;
+
+ALTER TABLE Asistencias
+DROP COLUMN IdSocio;
+
+ALTER TABLE Asistencias
+ADD IdPase INT NOT NULL,
+    CONSTRAINT FK_Asistencias_Pase FOREIGN KEY (IdPase)
+        REFERENCES PasePorSocio(IdPase);
+
+ALTER TABLE Inscripciones
+ADD Estado NVARCHAR(20) NOT NULL DEFAULT 'Activa'
+    CONSTRAINT CK_Inscripciones_Estado CHECK (Estado IN ('Activa', 'Cancelada', 'Cambiada'));
+
+	USE TPIGimnasio;
+GO
+
+USE TPIGimnasio;
+GO
+
+
+
