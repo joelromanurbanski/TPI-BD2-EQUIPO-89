@@ -2,12 +2,6 @@
 --  TPIGimnasio
 -- ======================================================
 
--- 0) RECREAR BASE
-IF DB_ID('TPIGimnasio') IS NOT NULL
-BEGIN
-    ALTER DATABASE TPIGimnasio SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-    DROP DATABASE TPIGimnasio;
-END
 GO
 CREATE DATABASE TPIGimnasio;
 GO
@@ -19,7 +13,7 @@ GO
 -- ======================================================
 
 -- 1.1) PERSONA
-CREATE TABLE dbo.Persona(
+CREATE TABLE Persona(
     IdPersona INT IDENTITY(1,1) PRIMARY KEY,
     DNI       CHAR(8)        NOT NULL UNIQUE,
     Apellido  NVARCHAR(100)  NOT NULL,
@@ -28,7 +22,7 @@ CREATE TABLE dbo.Persona(
 GO
 
 -- 1.2) SOCIOS
-CREATE TABLE dbo.Socios(
+CREATE TABLE Socios(
     IDSocio         INT IDENTITY(1,1) PRIMARY KEY,
     IdPersona       INT             NOT NULL,
     Email           NVARCHAR(150)   NOT NULL,
@@ -41,7 +35,7 @@ CREATE TABLE dbo.Socios(
 GO
 
 -- 1.3) PROFESORES
-CREATE TABLE dbo.Profesores(
+CREATE TABLE Profesores(
     IdProfesor   INT IDENTITY(1,1) PRIMARY KEY,
     IdPersona    INT             NOT NULL,
     Especialidad NVARCHAR(100)   NULL,
@@ -52,7 +46,7 @@ CREATE TABLE dbo.Profesores(
 GO
 
 -- 1.4) TIPOS DE PASE
-CREATE TABLE dbo.TiposPase(
+CREATE TABLE TiposPase(
     IDTipo  INT IDENTITY(1,1) PRIMARY KEY,
     Nombre  NVARCHAR(100) NOT NULL UNIQUE,
     Precio  DECIMAL(10,2) NOT NULL CONSTRAINT DF_TiposPase_Precio DEFAULT(0)
@@ -60,7 +54,7 @@ CREATE TABLE dbo.TiposPase(
 GO
 
 -- 1.5) PASES
-CREATE TABLE dbo.Pases(
+CREATE TABLE Pases(
     IDPase      INT IDENTITY(1,1) PRIMARY KEY,
     IDSocio     INT          NOT NULL,
     IDTipo      INT          NOT NULL,
@@ -75,7 +69,7 @@ CREATE TABLE dbo.Pases(
 GO
 
 -- 1.6) PASES HISTORIAL
-CREATE TABLE dbo.PasesHistorial(
+CREATE TABLE PasesHistorial(
     IdHist      INT IDENTITY(1,1) PRIMARY KEY,
     IDPase      INT          NOT NULL,
     IDSocio     INT          NOT NULL,
@@ -94,7 +88,7 @@ CREATE TABLE dbo.PasesHistorial(
 GO
 
 -- 1.7) CLASE MAESTRA
-CREATE TABLE dbo.ClaseMaestra(
+CREATE TABLE ClaseMaestra(
     IdClaseMaestra INT IDENTITY(1,1) PRIMARY KEY,
     Nombre         NVARCHAR(100) NOT NULL UNIQUE,
     Descripcion    NVARCHAR(200) NULL,
@@ -103,7 +97,7 @@ CREATE TABLE dbo.ClaseMaestra(
 GO
 
 -- 1.8) CLASE INSTANCIA
-CREATE TABLE dbo.ClaseInstancia(
+CREATE TABLE ClaseInstancia(
     IdClase        INT IDENTITY(1,1) PRIMARY KEY,
     IdClaseMaestra INT      NOT NULL,
     Fecha          DATE     NOT NULL,
@@ -118,7 +112,7 @@ CREATE TABLE dbo.ClaseInstancia(
 GO
 
 -- 1.9) INSCRIPCIONES
-CREATE TABLE dbo.Inscripciones(
+CREATE TABLE Inscripciones(
     IDInscripcion    INT IDENTITY(1,1) PRIMARY KEY,
     IDSocio          INT          NOT NULL,
     IdClaseInstancia INT          NOT NULL,
@@ -130,7 +124,7 @@ CREATE TABLE dbo.Inscripciones(
 GO
 
 -- 1.10) ASISTENCIAS
-CREATE TABLE dbo.Asistencias(
+CREATE TABLE Asistencias(
     IDAsistencia INT IDENTITY(1,1) PRIMARY KEY,
     IDSocio      INT          NOT NULL,
     FechaHoraIng DATETIME     NOT NULL CONSTRAINT DF_Asistencias_Fecha DEFAULT(GETDATE()),
@@ -152,54 +146,88 @@ GO
 -- Pases próximos a vencer (dentro de 7 días)
 CREATE VIEW vw_PasesProximosVencer AS
 SELECT 
-  P.IDPase,
-  S.IDSocio,
-  S.Apellido + ', ' + S.Nombre AS Socio,
-  TP.Nombre AS TipoPase,
+  P.IdPase,
+  S.IdSocio,
+  (Pe.Apellido + ', ' + Pe.Nombre) AS Socio,
+  T.Nombre AS TipoPase,
   P.FechaFin,
   DATEDIFF(DAY, CAST(GETDATE() AS DATE), P.FechaFin) AS DiasRestantes
-FROM Pases P
-JOIN Socios S ON S.IDSocio = P.IDSocio
-JOIN TiposPase TP ON TP.IDTipo = P.IDTipo
+FROM dbo.PasePorSocio AS P
+INNER JOIN dbo.Socios   AS S  ON S.IdSocio = P.IdSocio
+INNER JOIN dbo.Persona  AS Pe ON Pe.IdPersona = S.IdPersona
+INNER JOIN dbo.Pase     AS T  ON T.IdTipo   = P.IdTipo
 WHERE P.Estado = 1
   AND P.FechaFin >= CAST(GETDATE() AS DATE)
   AND P.FechaFin <= DATEADD(DAY, 7, CAST(GETDATE() AS DATE));
 GO
 
+
 -- Pases vigentes (activos hoy)
 CREATE VIEW vw_PasesVigentes AS
 SELECT 
-  P.IDPase,
-  P.IDSocio,
-  S.Apellido + ' ' + S.Nombre AS NombreCompleto,
-  TP.Nombre AS TipoPase,
+  P.IdPase,
+  P.IdSocio,
+  (Pe.Apellido + ' ' + Pe.Nombre) AS NombreCompleto,
+  T.Nombre AS TipoPase,
   P.FechaInicio,
   P.FechaFin,
   P.VecesMax,
   P.VecesUsadas,
   CASE 
-    WHEN P.VecesMax IS NULL THEN NULL
-    ELSE (P.VecesMax - P.VecesUsadas)
+      WHEN P.VecesMax IS NULL THEN NULL
+      ELSE (P.VecesMax - P.VecesUsadas)
   END AS UsosRestantes
-FROM Pases AS P
-JOIN Socios S  ON S.IDSocio = P.IDSocio
-JOIN TiposPase TP ON TP.IDTipo = P.IDTipo
+FROM dbo.PasePorSocio AS P
+INNER JOIN dbo.Socios   AS S  ON S.IdSocio = P.IdSocio
+INNER JOIN dbo.Persona  AS Pe ON Pe.IdPersona = S.IdPersona
+INNER JOIN dbo.Pase     AS T  ON T.IdTipo   = P.IdTipo
 WHERE P.Estado = 1
   AND CAST(GETDATE() AS DATE) BETWEEN P.FechaInicio AND P.FechaFin;
 GO
 
+
 -- Clases sin cupos disponibles
-CREATE VIEW vw_ClasesSinCupos AS
+CREATE VIEW vw_ClasesSinCupos
+AS
 SELECT 
-    c.IDClase,
-    c.NombreClase,
-    c.CupoMaximo,
-    COUNT(i.IDInscripcion) AS Inscritos,
-    c.FechaHora
-FROM Clases c
-LEFT JOIN Inscripciones i ON i.IDClase = c.IDClase
-GROUP BY c.IDClase, c.NombreClase, c.CupoMaximo, c.FechaHora
-HAVING COUNT(i.IDInscripcion) >= c.CupoMaximo;
+    ci.IdClase,
+    cm.Nombre       AS NombreClase,
+    ci.Fecha,
+    ci.HoraInicio,
+    ci.HoraFin,
+    ci.Cupo,
+    COUNT(i.IDInscripcion) AS CantInscriptos
+FROM ClaseInstancia ci
+INNER JOIN ClaseMaestra cm
+    ON cm.IdClaseMaestra = ci.IdClaseMaestra
+LEFT JOIN Inscripciones i
+    ON i.IdClaseInstancia = ci.IdClase
+   AND i.Estado = 'Activa'
+WHERE ci.Activa = 1
+GROUP BY 
+    ci.IdClase,
+    cm.Nombre,
+    ci.Fecha,
+    ci.HoraInicio,
+    ci.HoraFin,
+    ci.Cupo
+HAVING COUNT(i.IDInscripcion) >= ci.Cupo;
+GO
+
+--Socio con edad
+
+CREATE VIEW vw_SociosConEdad
+AS
+SELECT
+    s.IdSocio,
+    p.DNI,
+    p.Apellido,
+    p.Nombre,
+    p.Email,
+    dbo.fn_CalcularEdad(p.FechaNacimiento) AS Edad
+FROM Socios s
+JOIN Persona p ON p.IdPersona = s.IdPersona
+WHERE s.Estado = 1;
 GO
 
 -- Asistencias mensuales (resumen del mes actual)
@@ -242,121 +270,131 @@ GO
    PROCEDIMIENTOS ALMACENADOS
 ============================ */
 
-Create Procedure sp_RegistrarAsistencia 
-@IdSocio int, 
-@FechaHora DATETIME=null as
-Begin 
-	Begin Try
-	IF @FechaHora is null set @FechaHora=GETDATE();
+CREATE PROCEDURE sp_RegistrarAsistencia 
+    @IdSocio INT, 
+    @FechaHora DATETIME = NULL
+AS
+BEGIN
+    BEGIN TRY
+        IF @FechaHora IS NULL SET @FechaHora = GETDATE();
 
-	Declare @IdPase int,@IdTipo int,@VecesMax int,@VecesUsadas int;
+        DECLARE @IdPase INT, @IdTipo INT, @VecesMax INT, @VecesUsadas INT;
 
-	-- Buscamos un pase vigente (activo y dentro de las fechas)
-	Select Top 1
-		@IdPase=IDPase,
-		@IdTipo=IDTipo,
-		@VecesMax=VecesMax,
-		@VecesUsadas=VecesUsadas
-	From Pases
-	Where IDSocio=@IdSocio
-	and Estado=1 and cast(@FechaHora as DATE) Between FechaInicio and FechaFin
-	Order By FechaFin asc;
+        -- Pase vigente del socio (activo y dentro de fechas)
+        SELECT TOP 1
+            @IdPase = PPS.IdPase,
+            @IdTipo = PPS.IdTipo,
+            @VecesMax = PPS.VecesMax,
+            @VecesUsadas = PPS.VecesUsadas
+        FROM PasePorSocio PPS
+        WHERE PPS.IdSocio = @IdSocio
+          AND PPS.Estado = 1
+          AND CAST(@FechaHora AS DATE) BETWEEN PPS.FechaInicio AND PPS.FechaFin
+        ORDER BY PPS.FechaFin ASC;
 
-	-- Si no se encontró ningún pase
-	If @IdPase is null
-	Begin
-		Print 'No hay pase vigente para este socio.';
-		Return;
-	End
+        IF @IdPase IS NULL
+        BEGIN
+            PRINT 'No hay pase vigente para este socio.';
+            RETURN;
+        END
 
-	 -- Si tiene tope y ya no tiene usos disponibles
-	 If @VecesMax is not null and @VecesUsadas>=@VecesMAx
-	 Begin 
-		Print 'El pase ya no tiene usos disponibles';
-		Return;
-	End
+        -- Límite de usos
+        IF @VecesMax IS NOT NULL AND @VecesUsadas >= @VecesMax
+        BEGIN
+            PRINT 'El pase ya no tiene usos disponibles';
+            RETURN;
+        END
 
-	 -- Si el pase es diario y ya tiene una asistencia hoy
-	 If @IdTipo=1 and Exists(
-		Select 1 From Asistencias
-		Where IDSocio=@IdSocio
-		and Convert(date,FechaHoraIng)=convert(date,@FechaHora))
-	Begin
-		Print 'El pase ya fue usado hoy.';
-		Return;
-	End
+        -- Pase “diario”: una asistencia por día (si tu codificación es IdTipo=1)
+        IF @IdTipo = 1 AND EXISTS (
+            SELECT 1
+            FROM Asistencias
+            WHERE IdPase = @IdPase
+              AND CONVERT(date, FechaHoraIng) = CONVERT(date, @FechaHora)
+        )
+        BEGIN
+            PRINT 'El pase ya fue usado hoy.';
+            RETURN;
+        END
 
-	Begin Transaction;
+        BEGIN TRANSACTION;
 
-	Insert Into Asistencias(IDSocio,FechaHoraIng)
-	Values(@IdSocio,@FechaHora);
+        -- Registrar asistencia (ahora por IdPase)
+        INSERT INTO Asistencias (IdPase, FechaHoraIng)
+        VALUES (@IdPase, @FechaHora);
 
-	 -- Si el pase tiene límite, sumamos 1 uso
-	 If @VecesMax is not null
-	 Update Pases
-	 Set VecesUsadas=VecesUsadas+1
-	 Where IDPase=@IdPase;
+        -- Sumar uso si el pase tiene límite
+        IF @VecesMax IS NOT NULL
+        UPDATE PasePorSocio
+        SET VecesUsadas = VecesUsadas + 1
+        WHERE IdPase = @IdPase;
 
-	 -- Desactivamos el pase si se quedó sin usos o ya venció
-	 Update Pases
-	 Set Estado=0
-	 Where IDPase=@IdPase
-	 and((VecesMax is not null and VecesUsadas>=VecesMax)
-		or(cast(@FechaHora as DATE)>FechaFin)
-	);
-	Commit Transaction;
+        -- Desactivar si se quedó sin usos o venció
+        UPDATE PasePorSocio
+        SET Estado = 0
+        WHERE IdPase = @IdPase
+          AND (
+               (VecesMax IS NOT NULL AND VecesUsadas >= VecesMax)
+               OR (CAST(@FechaHora AS DATE) > FechaFin)
+          );
 
-	Print 'Asistencia registrada correctamente.';
+        COMMIT TRANSACTION;
 
-	End Try
-
-	Begin Catch
-	RollBack Transaction;
-	Print 'Error al registrar asistencia.';
-    Print ERROR_MESSAGE(); 
-  END CATCH
+        PRINT 'Asistencia registrada correctamente.';
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        PRINT 'Error al registrar asistencia.';
+        PRINT ERROR_MESSAGE();
+    END CATCH
 END
 GO
 
-Create Procedure sp_AsistenciasMensual 
-@Anio int, 
-@Mes int as
-Begin
-	Begin Try
-		Declare @AnioActual int = YEAR(GETDATE());
-		If @Anio<>@AnioActual
-		Begin
-		Print 'Año invalido. Solo se permite el año actual.';
-		Return;
-	End
-	If @Mes<1 or @Mes>12
-	Begin
-	Print 'Mes invalido.';
-	Return;
-	End
 
-DECLARE @Desde DATE = CAST(CAST(@Anio AS CHAR(4)) + 
-RIGHT('0'+CAST(@Mes AS VARCHAR(2)),2) + '01' AS DATE);
-DECLARE @Hasta DATE = DATEADD(MONTH, 1, @Desde);
+CREATE PROCEDURE sp_AsistenciasMensual 
+    @Anio INT, 
+    @Mes  INT
+AS
+BEGIN
+    BEGIN TRY
+        DECLARE @AnioActual INT = YEAR(GETDATE());
+        IF @Anio <> @AnioActual
+        BEGIN
+            PRINT 'Año invalido. Solo se permite el año actual.';
+            RETURN;
+        END
 
-Select S.IDSocio, S.Apellido+' '+S.Nombre as Socio, 
-COUNT(A.IDAsistencia) as CantidadAsistencias,
-Min(A.FechaHoraIng) as PrimeraASistencia,
-Max(A.FechaHoraIng) as UltimaASistencia
-From Socios S
-Left Join Asistencias A on A.IDSocio=S.IDSocio
-and A.FechaHoraIng>=@Desde and A.FechaHoraIng<@Hasta
-Group By S.IDSocio,S.Apellido,S.Nombre
-Order By CantidadAsistencias Desc;
+        IF @Mes < 1 OR @Mes > 12
+        BEGIN
+            PRINT 'Mes invalido.';
+            RETURN;
+        END
 
-End Try
+        DECLARE @Desde DATE = CAST(CAST(@Anio AS CHAR(4)) + RIGHT('0' + CAST(@Mes AS VARCHAR(2)), 2) + '01' AS DATE);
+        DECLARE @Hasta DATE = DATEADD(MONTH, 1, @Desde);
 
-Begin Catch 
-Print 'Error al obetener el resumen mensual.';
-Print Error_Message();
-End Catch
-End
-Go
+        SELECT 
+            S.IdSocio,
+            (Pe.Apellido + ' ' + Pe.Nombre) AS Socio,
+            COUNT(A.IdAsistencia)           AS CantidadAsistencias,
+            MIN(A.FechaHoraIng)             AS PrimeraAsistencia,
+            MAX(A.FechaHoraIng)             AS UltimaAsistencia
+        FROM Socios S
+        INNER JOIN Persona Pe       ON Pe.IdPersona = S.IdPersona
+        LEFT  JOIN PasePorSocio PPS ON PPS.IdSocio = S.IdSocio
+        LEFT  JOIN Asistencias A    ON A.IdPase = PPS.IdPase
+                                   AND A.FechaHoraIng >= @Desde 
+                                   AND A.FechaHoraIng <  @Hasta
+        GROUP BY S.IdSocio, Pe.Apellido, Pe.Nombre
+        ORDER BY CantidadAsistencias DESC;
+    END TRY
+    BEGIN CATCH
+        PRINT 'Error al obtener el resumen mensual.';
+        PRINT ERROR_MESSAGE();
+    END CATCH
+END
+GO
+
 
 CREATE PROCEDURE sp_ActivarNuevoPase
     @IDSocio INT,
@@ -492,20 +530,35 @@ AS
 BEGIN
     BEGIN TRY
         SELECT 
-            c.IDClase,
-            c.NombreClase,
-            c.CupoMaximo,
+            ci.IdClase,
+            cm.Nombre AS NombreClase,
+            (pe.Apellido + ' ' + pe.Nombre) AS Profesor,
+            ci.Fecha,
+            ci.HoraInicio,
+            ci.HoraFin,
+            ci.Cupo,
             COUNT(i.IDInscripcion) AS Inscriptos,
-            (c.CupoMaximo - COUNT(i.IDInscripcion)) AS LugaresDisponibles,
-            c.FechaHora
-        FROM Clases c
-        LEFT JOIN Inscripciones i ON i.IDClase = c.IDClase
-        GROUP BY c.IDClase, c.NombreClase, c.CupoMaximo, c.FechaHora
-        HAVING COUNT(i.IDInscripcion) < c.CupoMaximo
-        ORDER BY c.FechaHora;
+            (ci.Cupo - COUNT(i.IDInscripcion)) AS LugaresDisponibles
+        FROM ClaseInstancia ci
+        INNER JOIN ClaseMaestra cm 
+            ON cm.IdClaseMaestra = ci.IdClaseMaestra
+        LEFT JOIN Profesores pr 
+            ON pr.IdProfesor = ci.IdProfesor
+        LEFT JOIN Persona pe 
+            ON pe.IdPersona = pr.IdPersona
+        LEFT JOIN Inscripciones i 
+            ON i.IdClaseInstancia = ci.IdClase
+           AND i.Estado = 'Activa'
+        WHERE ci.Activa = 1
+        GROUP BY 
+            ci.IdClase, cm.Nombre,
+            pe.Apellido, pe.Nombre,
+            ci.Fecha, ci.HoraInicio, ci.HoraFin,
+            ci.Cupo
+        HAVING COUNT(i.IDInscripcion) < ci.Cupo
+        ORDER BY ci.Fecha, ci.HoraInicio;
 
         PRINT 'Listado de clases con cupos disponibles generado correctamente.';
-
     END TRY
     BEGIN CATCH
         PRINT 'Error al listar las clases disponibles.';
@@ -513,6 +566,7 @@ BEGIN
     END CATCH
 END
 GO
+
 
 -- otra forma de registrar y activar un socio (acordarse el lugar de los parametros donde colocarlo):
 EXEC sp_ActivarNuevoSocio 3,'carracedo','sebas','scarracedo@example.com';
@@ -529,201 +583,71 @@ SELECT * FROM Socios;
 /* ============================
    TRIGGERS
 ============================ */
-go
-Create Trigger tr_Socio_NoRepetirDNI on Socios
-After Insert
-As
-If Exists(Select 1 From inserted i 
-   Join Socios s on s.DNI=i.DNI and s.IDSocio<>i.IDSocio)
-Begin 
-	Raiserror('El DNI ya existe.',16,1);
-	Rollback Transaction;
-End;
-Go
 
-Create Trigger tr_BajaLogicaSocios
-On Socios
-after Update
-As
--- Solo actua si se cambio Estado a 0
-IF EXISTS (SELECT 1 FROM inserted i JOIN deleted d ON i.IdSocio=d.IdSocio 
-		   WHERE i.Estado=0 AND ISNULL(d.Estado,1)<>0)
-Begin
-  Update p
-    Set p.Estado = 0
-  From Pases p
-  Inner Join inserted i on i.IdSocio = p.IdSocio
-  Where i.Estado = 0 AND p.Estado = 1;
-End;
-Go
+--tr_Asistencias: Objetivo: Evita registrar dos asistencias el mismo día para el mismo socio.
 
-Create Trigger tr_Pases_Vencidos On Pases
-After Update
-As
-Update p
-Set p.Estado = 0
-From Pases p
-Where p.Estado = 1
-  And p.FechaFin < GETDATE();
-Go
---TR_Pases_AI Objetivo: desactivar automáticamente cualquier otro pase vigente que tenga el socio cuando se inserta un nuevo pase.
-CREATE TRIGGER TR_Pases_AI
-ON Pases
+CREATE TRIGGER tr_Asistencias_AI
+ON Asistencias
 AFTER INSERT
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    UPDATE Pases
-    SET Estado = 0
-    WHERE IDSocio IN (SELECT IDSocio FROM inserted)
-      AND IDPase NOT IN (SELECT IDPase FROM inserted)
-      AND Estado = 1;
-
-    PRINT 'Se desactivaron otros pases vigentes del socio al crear uno nuevo.';
-END;
-GO
-
---TR_Pases_Vencidos Objetivo: actualizar automáticamente el campo Estado de los pases vencidos
- 
-CREATE TRIGGER TR_Actualizar_Pases_Vencidos
-ON Pases
-AFTER INSERT, UPDATE
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    UPDATE Pases
-    SET Estado = 0
-    WHERE FechaFin < CAST(GETDATE() AS DATE)
-      AND Estado = 1;
-
-    PRINT 'Se actualizaron los pases vencidos.';
-END;
-GO
---TR_Pases_ValidacionGeneral Objetivo: evitar que se inserten o actualicen pases con fechas inconsistentes (por ejemplo, FechaFin anterior a FechaInicio).
-CREATE TRIGGER TR_Pases_ValidacionGeneral
-ON Pases
-INSTEAD OF INSERT, UPDATE
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    -- Validar que las fechas sean correctas
     IF EXISTS (
-        SELECT 1 
-        FROM inserted
-        WHERE FechaFin <= FechaInicio
+        SELECT 
+            i.IdPase,
+            CONVERT(date, i.FechaHoraIng)
+        FROM inserted i
+        JOIN Asistencias a
+            ON a.IdPase = i.IdPase
+           AND CONVERT(date, a.FechaHoraIng) = CONVERT(date, i.FechaHoraIng)
+           AND a.IdAsistencia <> i.IdAsistencia
     )
     BEGIN
-        PRINT 'Error: la fecha de fin debe ser posterior a la fecha de inicio.';
+        RAISERROR('El pase ya tiene una asistencia registrada para este día.', 16, 1);
         ROLLBACK TRANSACTION;
         RETURN;
     END
-
-    -- Si está todo bien, realizar la operación normalmente
-    INSERT INTO Pases (IDSocio, IDTipo, FechaInicio, FechaFin, VecesMax, VecesUsadas, Estado)
-    SELECT IDSocio, IDTipo, FechaInicio, FechaFin, VecesMax, VecesUsadas, Estado
-    FROM inserted;
-
-    PRINT 'Validación correcta: pase insertado o actualizado exitosamente.';
-END;
+END
 GO
 
---TR_Asistencias_AI: Objetivo: Evita registrar dos asistencias el mismo día para el mismo socio.
-
-CREATE TRIGGER TR_Asistencias_AI
-ON Asistencias
-AFTER INSERT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    IF EXISTS (
-        SELECT 1
-        FROM Asistencias A
-        JOIN inserted I ON A.IDSocio = I.IDSocio
-        WHERE CONVERT(DATE, A.FechaHoraIng) = CONVERT(DATE, I.FechaHoraIng)
-          AND A.IDAsistencia <> I.IDAsistencia
-    )
-    BEGIN
-        RAISERROR('Error: ya existe una asistencia registrada para este socio en el día.', 16, 1);
-        ROLLBACK TRANSACTION;
-        RETURN;
-    END;
-END;
-GO
-
---TR_Asistencias_BI: Objetivo: Evita insertar una asistencia si el socio no está activo.
-
-CREATE TRIGGER TR_Asistencias_BI
-ON Asistencias
-INSTEAD OF INSERT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    IF EXISTS (
-        SELECT 1
-        FROM inserted I
-        JOIN Socios S ON S.IDSocio = I.IDSocio
-        WHERE S.Estado = 0
-    )
-    BEGIN
-        RAISERROR('Error: el socio no está activo. No se puede registrar asistencia.', 16, 1);
-        ROLLBACK TRANSACTION;
-        RETURN;
-    END;
-
-    -- Si pasa la validación, se inserta normalmente
-    INSERT INTO Asistencias (IDSocio, FechaHoraIng)
-    SELECT IDSocio, FechaHoraIng FROM inserted;
-END;
-GO
-
--- TR_RegistroAsistenciaPorInscripcion: Objetivo: Inserta automáticamente una asistencia cuando un socio se inscribe a una clase.
-
-CREATE TRIGGER TR_RegistroAsistenciaPorInscripcion
+CREATE TRIGGER tr_Inscripciones_Eliminar_ActualizarCupo
 ON Inscripciones
-AFTER INSERT
+AFTER DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
-
-    INSERT INTO Asistencias (IDSocio, FechaHoraIng)
-    SELECT IDSocio, GETDATE()
-    FROM inserted;
-
-    PRINT 'Asistencia registrada automáticamente al inscribirse en una clase.';
-END;
+	    
+    UPDATE ci
+    SET ci.Cupo = ci.Cupo + 1
+    FROM ClaseInstancia ci
+    INNER JOIN deleted d
+        ON d.IdClaseInstancia = ci.IdClase;
+END
 GO
 
---TR_ControlCuposInscripciones: Objetivo: Impide que se inscriban más socios que el cupo máximo de la clase.
-
-CREATE TRIGGER TR_ControlCuposInscripciones
-ON Inscripciones
-AFTER INSERT
+CREATE TRIGGER tr_PasePorSocio_RecalcularEstado
+ON PasePorSocio
+AFTER UPDATE
 AS
 BEGIN
     SET NOCOUNT ON;
-
-    IF EXISTS (
-        SELECT 1
-        FROM ClaseInstancia C
-        JOIN (
-            SELECT IdClaseInstancia, COUNT(*) AS TotalInscriptos
-            FROM Inscripciones
-            GROUP BY IdClaseInstancia
-        ) AS X ON C.IdClase = X.IdClaseInstancia
-        WHERE X.TotalInscriptos > C.Cupo
-    )
-    BEGIN
-        RAISERROR('Error: no se puede inscribir, se alcanzó el cupo máximo de la clase.', 16, 1);
-        ROLLBACK TRANSACTION;
-        RETURN;
-    END;
-END;
+   
+    UPDATE p
+    SET Estado = CASE 
+                    WHEN (p.VecesMax IS NOT NULL AND p.VecesUsadas >= p.VecesMax)
+                         OR (CAST(GETDATE() AS DATE) > p.FechaFin)
+                         THEN 0      
+                    ELSE 1          
+                 END
+    FROM PasePorSocio p
+    INNER JOIN inserted i
+        ON i.IdPase = p.IdPase;
+END
 GO
+
+
+
 
 /* ============================
    MODIFICACIONES A LAS TABLAS
