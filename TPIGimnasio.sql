@@ -216,6 +216,28 @@ GO
 
 --Socio con edad
 
+CREATE FUNCTION dbo.fn_CalcularEdad (@FechaNacimiento DATE)
+RETURNS INT
+AS
+BEGIN
+    DECLARE @Edad INT;
+
+    -- Si la fecha es NULL, devolver NULL
+    IF @FechaNacimiento IS NULL
+        RETURN NULL;
+
+    -- Diferencia básica en años
+    SET @Edad = DATEDIFF(YEAR, @FechaNacimiento, GETDATE());
+
+    -- Ajuste si todavía no cumplió años este año
+    IF DATEADD(YEAR, @Edad, @FechaNacimiento) > CAST(GETDATE() AS DATE)
+        SET @Edad = @Edad - 1;
+
+    RETURN @Edad;
+END;
+GO
+
+
 CREATE VIEW vw_SociosConEdad
 AS
 SELECT
@@ -230,42 +252,7 @@ JOIN Persona p ON p.IdPersona = s.IdPersona
 WHERE s.Estado = 1;
 GO
 
--- Asistencias mensuales (resumen del mes actual)
-CREATE VIEW vw_AsistenciasMensuales AS
-SELECT 
-    s.IDSocio,
-    s.Apellido + ' ' + s.Nombre AS Socio,
-    COUNT(a.IDAsistencia) AS CantidadAsistencias,
-    DATENAME(MONTH, GETDATE()) + ' ' + CAST(YEAR(GETDATE()) AS VARCHAR(4)) AS Periodo
-FROM Socios s
-LEFT JOIN Asistencias a 
-       ON s.IDSocio = a.IDSocio
-      AND MONTH(a.FechaHoraIng) = MONTH(GETDATE())
-      AND YEAR(a.FechaHoraIng) = YEAR(GETDATE())
-GROUP BY s.IDSocio, s.Apellido, s.Nombre;
-GO
- -- Asistencia hoy :  liste todos los socios que fueron
-CREATE VIEW vw_AsistenciasHoy AS
-SELECT 
-    A.IDAsistencia,
-    A.IDSocio,
-    A.FechaHoraIng,
-    S.Apellido + ' ' + S.Nombre AS NombreCompleto
-FROM Asistencias AS A
-JOIN Socios AS S ON S.IDSocio = A.IDSocio
-WHERE CONVERT(date, A.FechaHoraIng) = CONVERT(date, GETDATE());
-GO
--- Socios Activos 
-CREATE VIEW vw_SociosActivos AS
-SELECT 
-    IDSocio,
-    DNI,
-    Apellido,
-    Nombre,
-    Email
-FROM Socios
-WHERE Estado = 1;
-GO
+
 /* ============================
    PROCEDIMIENTOS ALMACENADOS
 ============================ */
@@ -395,135 +382,6 @@ BEGIN
 END
 GO
 
-
-CREATE PROCEDURE sp_ActivarNuevoPase
-    @IDSocio INT,
-    @IDTipo INT,
-    @FechaInicio DATE,
-    @FechaFin DATE
-AS
-BEGIN
-    BEGIN TRY
-        DECLARE @VecesMax INT;
-
-        -- Validar socio activo
-        IF NOT EXISTS (SELECT 1 FROM Socios WHERE IDSocio = @IDSocio AND Estado = 1)
-        BEGIN
-            PRINT 'Error: El socio no existe o no está activo.';
-            RETURN;
-        END
-
-        -- Validar tipo de pase
-        IF NOT EXISTS (SELECT 1 FROM TiposPase WHERE IDTipo = @IDTipo)
-        BEGIN
-            PRINT 'Error: Tipo de pase no válido.';
-            RETURN;
-        END
-
-        -- Validar fechas
-        IF @FechaInicio IS NULL OR @FechaFin IS NULL OR @FechaInicio > @FechaFin
-        BEGIN
-            PRINT 'Error: Fechas de inicio/fin inválidas.';
-            RETURN;
-        END
-
-        -- Asignar cantidad de usos máximos según tipo
-        SELECT @VecesMax = CASE UPPER(Nombre)
-                              WHEN 'DIARIO' THEN 1
-                              WHEN 'OCHO' THEN 8
-                              WHEN 'LIBRE' THEN NULL
-                           END
-        FROM TiposPase
-        WHERE IDTipo = @IDTipo;
-
-        -- Desactivar otros pases vigentes del socio (solo debe haber uno activo)
-        UPDATE Pases
-        SET Estado = 0
-        WHERE IDSocio = @IDSocio AND Estado = 1;
-
-        -- Insertar nuevo pase
-        INSERT INTO Pases (IDSocio, IDTipo, FechaInicio, FechaFin, VecesMax, VecesUsadas, Estado)
-        VALUES (@IDSocio, @IDTipo, @FechaInicio, @FechaFin, @VecesMax, 0, 1);
-
-        PRINT 'Nuevo pase activado correctamente.';
-    END TRY
-
-    BEGIN CATCH
-        PRINT 'Error al activar el nuevo pase.';
-        PRINT ERROR_MESSAGE();
-    END CATCH
-END
-GO
-  CREATE PROCEDURE sp_ActivarNuevoSocio
-    @DNI CHAR(8),
-    @Apellido NVARCHAR(100),
-    @Nombre NVARCHAR(100),
-    @Email NVARCHAR(150)
-AS
-BEGIN
-    BEGIN TRY
-        -- Validaciones
-        IF @DNI IS NULL OR @Apellido IS NULL OR @Nombre IS NULL OR @Email IS NULL
-        BEGIN
-            PRINT 'Error: Todos los campos son obligatorios.';
-            RETURN;
-        END
-
-        IF EXISTS (SELECT 1 FROM Socios WHERE DNI = @DNI)
-        BEGIN
-            PRINT 'Error: Ya existe un socio con ese DNI.';
-            RETURN;
-        END
-
-        IF EXISTS (SELECT 1 FROM Socios WHERE Email = @Email)
-        BEGIN
-            PRINT 'Error: Ya existe un socio con ese Email.';
-            RETURN;
-        END
-
-        -- Inserción del socio
-        INSERT INTO Socios (DNI, Apellido, Nombre, Email, Estado)
-        VALUES (@DNI, @Apellido, @Nombre, @Email, 1);
-
-        PRINT 'Socio registrado y activado correctamente.';
-    END TRY
-
-    BEGIN CATCH
-        PRINT 'Error al registrar el nuevo socio.';
-        PRINT ERROR_MESSAGE();
-    END CATCH
-END
-GO
-
--- Buscar Socio por DNI
-CREATE PROCEDURE sp_BuscarSocioPorDNI
-    @DNI CHAR(8)
-AS
-BEGIN
-    BEGIN TRY
-        IF NOT EXISTS (SELECT 1 FROM Socios WHERE DNI = @DNI)
-        BEGIN
-            PRINT 'No se encontró ningún socio con ese DNI.';
-            RETURN;
-        END
-
-        SELECT 
-            IDSocio,
-            DNI,
-            Apellido + ' ' + Nombre AS NombreCompleto,
-            Email,
-            CASE WHEN Estado = 1 THEN 'Activo' ELSE 'Inactivo' END AS Estado
-        FROM Socios
-        WHERE DNI = @DNI;
-
-    END TRY
-    BEGIN CATCH
-        PRINT 'Error al buscar el socio.';
-        PRINT ERROR_MESSAGE();
-    END CATCH
-END
-GO
-
 -- Listar Clases Disponibles
 CREATE PROCEDURE sp_ListarClasesDisponibles
 AS
@@ -566,19 +424,6 @@ BEGIN
     END CATCH
 END
 GO
-
-
--- otra forma de registrar y activar un socio (acordarse el lugar de los parametros donde colocarlo):
-EXEC sp_ActivarNuevoSocio 3,'carracedo','sebas','scarracedo@example.com';
-
--- asi se registra y activa un socio: 
-EXEC sp_ActivarNuevoSocio 
-    @DNI = '40205305',
-    @Apellido = N'carracedo',
-    @Nombre = N'sebas',
-    @Email = N'scarra@example.com';
-    -- asi se verifica que aparezcan todos :
-SELECT * FROM Socios;
 
 /* ============================
    TRIGGERS
@@ -647,85 +492,6 @@ END
 GO
 
 
-
-
-/* ============================
-   MODIFICACIONES A LAS TABLAS
-============================ */
-
-ALTER TABLE Persona
-ADD Direccion NVARCHAR(200),
-    FechaNacimiento DATE,
-    Email NVARCHAR(150),
-    EstadoCivil NVARCHAR(50);
-GO
-
--- Agregar columna Observaciones
-ALTER TABLE Socios
-ADD Observaciones NVARCHAR(300);
-GO
-
--- Eliminar columnas que ahora están en Persona
-ALTER TABLE Socios
-DROP COLUMN Email;
-GO 
-
-ALTER TABLE Socios
-DROP COLUMN FechaNacimiento;
-GO
-
---Cambiar nombres a las tablas
-EXEC sp_rename 'TiposPase', 'Pase';
-GO
-
-EXEC sp_rename 'Pases', 'PasePorSocio';
-GO
-
---Cambiar nombre de columna
-EXEC sp_rename 'PasesHistorial.FechaEvento', 'FechaRenovacion', 'COLUMN';
-GO
-
-USE TPIGimnasio;
-GO
-ALTER TABLE dbo.PasePorSocio
-ADD CONSTRAINT CK_PPS_UsosNoSuperaMax
-CHECK (VecesMax IS NULL OR VecesUsadas <= VecesMax);
-GO
-
-ALTER TABLE PasePorSocio ADD FechaRenovacion DATE NULL;
-DROP TABLE PasesHistorial;
-
-CREATE TABLE HistorialMedico (
-    IdHistorial INT IDENTITY PRIMARY KEY,
-    IdSocio INT NOT NULL,
-    FechaControl DATE NOT NULL DEFAULT GETDATE(),
-    TipoControl NVARCHAR(100) NOT NULL,
-    Resultado NVARCHAR(200),
-    Observaciones NVARCHAR(200),
-    CONSTRAINT FK_HistorialMedico_Socio FOREIGN KEY (IdSocio)
-        REFERENCES Socios(IdSocio)
-);
-
-ALTER TABLE Asistencias
-DROP CONSTRAINT FK_Asistencias_Socio;
-
-ALTER TABLE Asistencias
-DROP COLUMN IdSocio;
-
-ALTER TABLE Asistencias
-ADD IdPase INT NOT NULL,
-    CONSTRAINT FK_Asistencias_Pase FOREIGN KEY (IdPase)
-        REFERENCES PasePorSocio(IdPase);
-
-ALTER TABLE Inscripciones
-ADD Estado NVARCHAR(20) NOT NULL DEFAULT 'Activa'
-    CONSTRAINT CK_Inscripciones_Estado CHECK (Estado IN ('Activa', 'Cancelada', 'Cambiada'));
-
-	USE TPIGimnasio;
-GO
-
-USE TPIGimnasio;
-GO
 
 
 
