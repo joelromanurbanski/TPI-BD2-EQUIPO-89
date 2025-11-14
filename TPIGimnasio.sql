@@ -253,6 +253,42 @@ WHERE s.Estado = 1;
 GO
 
 
+CREATE FUNCTION dbo.fn_UsosRestantes
+(
+    @VecesMax INT,
+    @VecesUsadas INT
+)
+RETURNS INT
+AS
+BEGIN
+    IF @VecesMax IS NULL
+        RETURN NULL;  -- Pase ilimitado
+
+    RETURN @VecesMax - @VecesUsadas;
+END;
+GO
+
+
+CREATE VIEW vw_PasesConUsosRestantes
+AS
+SELECT
+    pps.IDPase,
+    s.IDSocio,
+    per.Apellido + ' ' + per.Nombre AS Socio,
+    pa.Nombre AS TipoPase,
+    pps.FechaInicio,
+    pps.FechaFin,
+    pps.VecesMax,
+    pps.VecesUsadas,
+    dbo.fn_UsosRestantes(pps.VecesMax, pps.VecesUsadas) AS UsosRestantes,
+    pps.Estado
+FROM PasePorSocio pps
+INNER JOIN Socios s ON s.IDSocio = pps.IDSocio
+INNER JOIN Persona per ON per.IdPersona = s.IdPersona
+INNER JOIN Pase pa ON pa.IDTipo = pps.IDTipo;
+GO
+
+
 /* ============================
    PROCEDIMIENTOS ALMACENADOS
 ============================ */
@@ -424,6 +460,31 @@ BEGIN
     END CATCH
 END
 GO
+
+--Buscar socio por DNI
+
+CREATE PROCEDURE sp_BuscarSocioPorDNI
+(
+    @DNI CHAR(8)
+)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT 
+        s.IDSocio,
+        p.Apellido,
+        p.Nombre,
+        p.DNI,
+        s.Estado,
+        s.FechaAlta,
+        s.Observaciones
+    FROM Socios s
+    INNER JOIN Persona p ON p.IdPersona = s.IdPersona
+    WHERE p.DNI = @DNI;
+END;
+GO
+
 
 /* ============================
    TRIGGERS
