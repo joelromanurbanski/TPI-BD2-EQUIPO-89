@@ -17,7 +17,7 @@ GO
 --------------------------------------------------
 CREATE TABLE Persona (
     IdPersona      INT IDENTITY(1,1) PRIMARY KEY,
-    DNI            CHAR(8)       NOT NULL UNIQUE,      -- DNI no se repite
+    DNI            CHAR(8)       NOT NULL UNIQUE,     
     Apellido       NVARCHAR(100) NOT NULL,
     Nombre         NVARCHAR(100) NOT NULL,
     Direccion      NVARCHAR(200) NULL,
@@ -280,7 +280,9 @@ JOIN Persona p ON p.IdPersona = s.IdPersona
 WHERE s.Estado = 1;
 GO
 
+SELECT * FROM vw_SociosConEdad;
 
+--Usos restantes
 CREATE FUNCTION dbo.fn_UsosRestantes
 (
     @VecesMax INT,
@@ -560,6 +562,7 @@ BEGIN
 END
 GO
 
+-- TRIGGER #3: Recalcula automáticamente el estado del pase
 CREATE TRIGGER tr_PasePorSocio_RecalcularEstado
 ON PasePorSocio
 AFTER UPDATE
@@ -580,8 +583,14 @@ BEGIN
 END
 GO
 
-USE TPIGimnasio;
-GO
+UPDATE PasePorSocio
+SET VecesUsadas = VecesUsadas + 1
+WHERE IdPase = 6;
+
+SELECT *
+FROM PasePorSocio
+WHERE IdPase = 6;
+
 
 /* =========================================================
    0) LIMPIEZA DE DATOS DE PRUEBA 
