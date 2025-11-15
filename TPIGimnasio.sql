@@ -9,133 +9,161 @@ USE TPIGimnasio;
 GO
 
 -- ======================================================
--- 1) TABLAS
+--  TABLAS
 -- ======================================================
 
--- 1.1) PERSONA
-CREATE TABLE Persona(
-    IdPersona INT IDENTITY(1,1) PRIMARY KEY,
-    DNI       CHAR(8)        NOT NULL UNIQUE,
-    Apellido  NVARCHAR(100)  NOT NULL,
-    Nombre    NVARCHAR(100)  NOT NULL
+--------------------------------------------------
+-- 1) TABLA PERSONA
+--------------------------------------------------
+CREATE TABLE Persona (
+    IdPersona      INT IDENTITY(1,1) PRIMARY KEY,
+    DNI            CHAR(8)       NOT NULL UNIQUE,      -- DNI no se repite
+    Apellido       NVARCHAR(100) NOT NULL,
+    Nombre         NVARCHAR(100) NOT NULL,
+    Direccion      NVARCHAR(200) NULL,
+    FechaNacimiento DATE         NOT NULL,
+    Email          NVARCHAR(150) NULL,
+    EstadoCivil    NVARCHAR(50)  NULL
 );
 GO
 
--- 1.2) SOCIOS
-CREATE TABLE Socios(
-    IDSocio         INT IDENTITY(1,1) PRIMARY KEY,
-    IdPersona       INT             NOT NULL,
-    Email           NVARCHAR(150)   NOT NULL,
-    Estado          BIT             NOT NULL CONSTRAINT DF_Socios_Estado DEFAULT(1),
-    FechaNacimiento DATE            NULL,
-    FechaAlta       DATETIME        NOT NULL CONSTRAINT DF_Socios_FechaAlta DEFAULT(GETDATE()),
-    CONSTRAINT UQ_Socios_Email UNIQUE(Email),
-    CONSTRAINT FK_Socios_Persona FOREIGN KEY(IdPersona) REFERENCES dbo.Persona(IdPersona)
+--------------------------------------------------
+-- 2) TABLA SOCIOS
+--------------------------------------------------
+CREATE TABLE Socios (
+    IDSocio      INT IDENTITY(1,1) PRIMARY KEY,
+    IdPersona    INT          NOT NULL,
+    Estado       BIT          NOT NULL DEFAULT 1,
+    FechaAlta    DATETIME     NOT NULL DEFAULT GETDATE(),
+    Observaciones NVARCHAR(300) NULL,
+    CONSTRAINT FK_Socios_Persona
+        FOREIGN KEY (IdPersona) REFERENCES Persona(IdPersona)
 );
 GO
 
--- 1.3) PROFESORES
-CREATE TABLE Profesores(
-    IdProfesor   INT IDENTITY(1,1) PRIMARY KEY,
-    IdPersona    INT             NOT NULL,
-    Especialidad NVARCHAR(100)   NULL,
-    Estado       BIT             NOT NULL CONSTRAINT DF_Profesores_Estado DEFAULT(1),
-    FechaAlta    DATETIME        NOT NULL CONSTRAINT DF_Profesores_FechaAlta DEFAULT(GETDATE()),
-    CONSTRAINT FK_Profesores_Persona FOREIGN KEY(IdPersona) REFERENCES dbo.Persona(IdPersona)
+--------------------------------------------------
+-- 3) TABLA PASE (TIPOS DE PASE)
+--------------------------------------------------
+CREATE TABLE Pase (
+    IDTipo INT IDENTITY(1,1) PRIMARY KEY,
+    Nombre NVARCHAR(100) NOT NULL UNIQUE,
+    Precio DECIMAL(10,2) NOT NULL DEFAULT 0
 );
 GO
 
--- 1.4) TIPOS DE PASE
-CREATE TABLE TiposPase(
-    IDTipo  INT IDENTITY(1,1) PRIMARY KEY,
-    Nombre  NVARCHAR(100) NOT NULL UNIQUE,
-    Precio  DECIMAL(10,2) NOT NULL CONSTRAINT DF_TiposPase_Precio DEFAULT(0)
+--------------------------------------------------
+-- 4) TABLA PASEPORSOCIO
+--------------------------------------------------
+CREATE TABLE PasePorSocio (
+    IDPase        INT IDENTITY(1,1) PRIMARY KEY,
+    IDSocio       INT     NOT NULL,
+    IDTipo        INT     NOT NULL,
+    FechaInicio   DATE    NOT NULL,
+    FechaFin      DATE    NOT NULL,
+    VecesMax      INT     NULL,
+    VecesUsadas   INT     NOT NULL DEFAULT 0,
+    Estado        BIT     NOT NULL DEFAULT 1,
+    FechaCreacion DATE  NULL,
+    CONSTRAINT FK_Pases_Socio
+        FOREIGN KEY (IDSocio) REFERENCES Socios(IDSocio),
+    CONSTRAINT FK_Pases_Tipo
+        FOREIGN KEY (IDTipo) REFERENCES Pase(IDTipo),
+    CONSTRAINT CK_PPS_UsosNoSuperaMax
+        CHECK (VecesMax IS NULL OR VecesUsadas <= VecesMax)
 );
 GO
 
--- 1.5) PASES
-CREATE TABLE Pases(
-    IDPase      INT IDENTITY(1,1) PRIMARY KEY,
-    IDSocio     INT          NOT NULL,
-    IDTipo      INT          NOT NULL,
-    FechaInicio DATE         NOT NULL,
-    FechaFin    DATE         NOT NULL,
-    VecesMax    INT          NULL,
-    VecesUsadas INT          NOT NULL CONSTRAINT DF_Pases_VecesUsadas DEFAULT(0),
-    Estado      BIT          NOT NULL CONSTRAINT DF_Pases_Estado DEFAULT(1),
-    CONSTRAINT FK_Pases_Socio FOREIGN KEY(IDSocio) REFERENCES dbo.Socios(IDSocio),
-    CONSTRAINT FK_Pases_Tipo  FOREIGN KEY(IDTipo)  REFERENCES dbo.TiposPase(IDTipo)
+--------------------------------------------------
+-- 5) TABLA ASISTENCIAS
+--------------------------------------------------
+CREATE TABLE Asistencias (
+    IDAsistencia INT IDENTITY(1,1) PRIMARY KEY,
+    FechaHoraIng DATETIME NOT NULL DEFAULT GETDATE(),
+    IdPase       INT      NOT NULL,
+    CONSTRAINT FK_Asistencias_Pase
+        FOREIGN KEY (IdPase) REFERENCES PasePorSocio(IDPase)
 );
 GO
 
--- 1.6) PASES HISTORIAL
-CREATE TABLE PasesHistorial(
-    IdHist      INT IDENTITY(1,1) PRIMARY KEY,
-    IDPase      INT          NOT NULL,
-    IDSocio     INT          NOT NULL,
-    IDTipo      INT          NOT NULL,
-    FechaInicio DATE         NOT NULL,
-    FechaFin    DATE         NOT NULL,
-    VecesMax    INT          NULL,
-    VecesUsadas INT          NOT NULL,
-    Estado      BIT          NOT NULL,
-    Accion      NVARCHAR(50) NOT NULL,   -- 'INSERT'/'UPDATE'/'VENCER', etc.
-    FechaEvento DATETIME     NOT NULL CONSTRAINT DF_PasesHistorial_Fecha DEFAULT(GETDATE()),
-    CONSTRAINT FK_PH_Pase  FOREIGN KEY(IDPase)  REFERENCES dbo.Pases(IDPase),
-    CONSTRAINT FK_PH_Socio FOREIGN KEY(IDSocio) REFERENCES dbo.Socios(IDSocio),
-    CONSTRAINT FK_PH_Tipo  FOREIGN KEY(IDTipo)  REFERENCES dbo.TiposPase(IDTipo)
-);
-GO
-
--- 1.7) CLASE MAESTRA
-CREATE TABLE ClaseMaestra(
+--------------------------------------------------
+-- 6) TABLA CLASEMAESTRA (tipo de clase)
+--------------------------------------------------
+CREATE TABLE ClaseMaestra (
     IdClaseMaestra INT IDENTITY(1,1) PRIMARY KEY,
     Nombre         NVARCHAR(100) NOT NULL UNIQUE,
     Descripcion    NVARCHAR(200) NULL,
-    Activa         BIT           NOT NULL CONSTRAINT DF_ClaseMaestra_Activa DEFAULT(1)
+    Activa         BIT           NOT NULL DEFAULT 1
 );
 GO
 
--- 1.8) CLASE INSTANCIA
-CREATE TABLE ClaseInstancia(
+--------------------------------------------------
+-- 7) TABLA PROFESORES
+--------------------------------------------------
+CREATE TABLE Profesores (
+    IdProfesor  INT IDENTITY(1,1) PRIMARY KEY,
+    IdPersona   INT          NOT NULL,
+    Especialidad NVARCHAR(100) NULL,
+    Estado      BIT          NOT NULL DEFAULT 1,
+    FechaAlta   DATETIME     NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT FK_Profesores_Persona
+        FOREIGN KEY (IdPersona) REFERENCES Persona(IdPersona)
+);
+GO
+
+--------------------------------------------------
+-- 8) TABLA CLASEINSTANCIA (clase en un día/hora)
+--------------------------------------------------
+CREATE TABLE ClaseInstancia (
     IdClase        INT IDENTITY(1,1) PRIMARY KEY,
     IdClaseMaestra INT      NOT NULL,
     Fecha          DATE     NOT NULL,
-    HoraInicio     TIME     NOT NULL,
-    HoraFin        TIME     NOT NULL,
-    Cupo           INT      NOT NULL CHECK (Cupo > 0),
-    IdProfesor     INT      NULL,
-    Activa         BIT      NOT NULL CONSTRAINT DF_ClaseInstancia_Activa DEFAULT(1),
-    CONSTRAINT FK_CI_Maestra  FOREIGN KEY(IdClaseMaestra) REFERENCES dbo.ClaseMaestra(IdClaseMaestra),
-    CONSTRAINT FK_CI_Profesor FOREIGN KEY(IdProfesor)     REFERENCES dbo.Profesores(IdProfesor)
+    HoraInicio     TIME(7)  NOT NULL,
+    HoraFin        TIME(7)  NOT NULL,
+    Cupo          INT       NOT NULL,
+    IdProfesor    INT       NULL,
+    Activa        BIT       NOT NULL DEFAULT 1,
+    CONSTRAINT FK_CI_Maestra
+        FOREIGN KEY (IdClaseMaestra) REFERENCES ClaseMaestra(IdClaseMaestra),
+    CONSTRAINT FK_CI_Profesor
+        FOREIGN KEY (IdProfesor) REFERENCES Profesores(IdProfesor),
+    CONSTRAINT CK_ClaseInstancia_Cupo
+        CHECK (Cupo > 0)
 );
 GO
 
--- 1.9) INSCRIPCIONES
-CREATE TABLE Inscripciones(
+--------------------------------------------------
+-- 9) TABLA HISTORIALMEDICO
+--------------------------------------------------
+CREATE TABLE HistorialMedico (
+    IdHistorial   INT IDENTITY(1,1) PRIMARY KEY,
+    IdSocio       INT          NOT NULL,
+    FechaControl  DATE         NOT NULL DEFAULT GETDATE(),
+    TipoControl   NVARCHAR(100) NOT NULL,
+    Resultado     NVARCHAR(200) NULL,
+    Observaciones NVARCHAR(200) NULL,
+    CONSTRAINT FK_HistorialMedico_Socio
+        FOREIGN KEY (IdSocio) REFERENCES Socios(IDSocio)
+);
+GO
+
+--------------------------------------------------
+-- 10) TABLA INSCRIPCIONES A CLASES
+--------------------------------------------------
+CREATE TABLE Inscripciones (
     IDInscripcion    INT IDENTITY(1,1) PRIMARY KEY,
     IDSocio          INT          NOT NULL,
     IdClaseInstancia INT          NOT NULL,
-    FechaAlta        DATETIME     NOT NULL CONSTRAINT DF_Inscripciones_FechaAlta DEFAULT(GETDATE()),
-    CONSTRAINT FK_Ins_Socio          FOREIGN KEY(IDSocio)          REFERENCES dbo.Socios(IDSocio),
-    CONSTRAINT FK_Ins_ClaseInstancia FOREIGN KEY(IdClaseInstancia) REFERENCES dbo.ClaseInstancia(IdClase),
-    CONSTRAINT UQ_Inscripciones_SocioClase UNIQUE(IDSocio, IdClaseInstancia)
+    FechaAlta        DATETIME     NOT NULL DEFAULT GETDATE(),
+    Estado           NVARCHAR(20) NOT NULL DEFAULT 'Activa',
+    CONSTRAINT FK_Ins_Socio
+        FOREIGN KEY (IDSocio) REFERENCES Socios(IDSocio),
+    CONSTRAINT FK_Ins_ClaseInstancia
+        FOREIGN KEY (IdClaseInstancia) REFERENCES ClaseInstancia(IdClase),
+    CONSTRAINT UQ_Inscripciones_SocioClase
+        UNIQUE (IDSocio, IdClaseInstancia),
+    CONSTRAINT CK_Inscripciones_Estado
+        CHECK (Estado IN ('Cambiada','Cancelada','Activa'))
 );
-GO
-
--- 1.10) ASISTENCIAS
-CREATE TABLE Asistencias(
-    IDAsistencia INT IDENTITY(1,1) PRIMARY KEY,
-    IDSocio      INT          NOT NULL,
-    FechaHoraIng DATETIME     NOT NULL CONSTRAINT DF_Asistencias_Fecha DEFAULT(GETDATE()),
-    CONSTRAINT FK_Asistencias_Socio FOREIGN KEY(IDSocio) REFERENCES dbo.Socios(IDSocio)
-);
-GO
-
--- Índices útiles
-CREATE INDEX IX_Pases_Socio_Fecha ON dbo.Pases(IDSocio, FechaInicio, FechaFin);
-GO
-CREATE INDEX IX_Asistencias_Socio_Fecha ON dbo.Asistencias(IDSocio, FechaHoraIng);
 GO
 
 
@@ -552,7 +580,221 @@ BEGIN
 END
 GO
 
+USE TPIGimnasio;
+GO
+
+/* =========================================================
+   0) LIMPIEZA DE DATOS DE PRUEBA 
+   ========================================================= */
+PRINT '--- Limpiando datos de prueba ---';
+
+DELETE FROM Asistencias;
+DELETE FROM Inscripciones;
+DELETE FROM HistorialMedico;
+DELETE FROM PasePorSocio;
+DELETE FROM ClaseInstancia;
+DELETE FROM ClaseMaestra;
+DELETE FROM Profesores;
+DELETE FROM Socios;
+DELETE FROM Persona;
+DELETE FROM Pase;
+GO
+
+-- Reiniciar IDENTITY (opcional, pero prolijo)
+DBCC CHECKIDENT ('Persona', RESEED, 0);
+DBCC CHECKIDENT ('Socios', RESEED, 0);
+DBCC CHECKIDENT ('Profesores', RESEED, 0);
+DBCC CHECKIDENT ('Pase', RESEED, 0);
+DBCC CHECKIDENT ('PasePorSocio', RESEED, 0);
+DBCC CHECKIDENT ('ClaseMaestra', RESEED, 0);
+DBCC CHECKIDENT ('ClaseInstancia', RESEED, 0);
+DBCC CHECKIDENT ('Inscripciones', RESEED, 0);
+DBCC CHECKIDENT ('Asistencias', RESEED, 0);
+DBCC CHECKIDENT ('HistorialMedico', RESEED, 0);
+GO
 
 
+/* =========================================================
+   1) PERSONAS (10 PERSONAS COMPLETAS)
+   ========================================================= */
+PRINT '--- Insertando Personas ---';
+
+INSERT INTO Persona
+    (DNI,      Apellido,   Nombre,   Direccion,                  FechaNacimiento,  Email,                           EstadoCivil)
+VALUES
+    ('30000001','Gomez',   'Juan',   'Av. Siempre Viva 123',     '1990-05-15',     'juan.gomez@email.com',         'Soltero'),
+    ('30000002','Perez',   'Maria',  'San Martin 450',           '1995-11-20',     'maria.perez@email.com',        'Soltera'),
+    ('30000003','Lopez',   'Carlos', 'Belgrano 789',             '1988-03-10',     'carlos.lopez@email.com',       'Casado'),
+    ('30000004','Garcia',  'Laura',  'Bv. Central 1000',         '1985-07-10',     'laura.garcia@email.com',       'Soltera'),
+    ('30000005','Romero',  'Natalia','Italia 345',               '1992-02-05',     'natalia.romero@email.com',     'Casada'),
+    ('30000006','Fernandez','Diego', 'Rivadavia 890',            '1998-09-25',     'diego.fernandez@email.com',    'Soltero'),
+    ('30000007','Torres',  'Sofia',  'Mitre 230',                '2000-12-01',     'sofia.torres@email.com',       'Soltera'),
+    ('30000008','Diaz',    'Martin', 'Colon 1200',               '1983-04-18',     'martin.diaz@email.com',        'Casado'),
+    ('30000009','Sanchez', 'Paula',  'Sarmiento 760',            '1991-06-30',     'paula.sanchez@email.com',      'Soltera'),
+    ('30000010','Ruiz',    'Andres', 'Av. Patria 55',            '1987-10-12',     'andres.ruiz@email.com',        'Divorciado');
+GO
+
+
+
+/* =========================================================
+   2) SOCIOS (7 SOCIOS)
+   ========================================================= */
+PRINT '--- Insertando Socios ---';
+
+INSERT INTO Socios (IdPersona, Estado, Observaciones)
+VALUES
+    (1, 1, 'Prefiere turno tarde'),          -- Juan
+    (2, 1, 'Viene 3 veces por semana'),      -- Maria
+    (3, 0, 'Inactivo por falta de pago'),    -- Carlos
+    (5, 1, 'Asiste a funcional'),            -- Natalia
+    (6, 1, 'Nuevo socio, alta reciente'),    -- Diego
+    (7, 1, 'Practica spinning'),             -- Sofia
+    (9, 1, 'Le interesan las clases de yoga'); -- Paula
+GO
+-- IdSocio: 1=Juan, 2=Maria, 3=Carlos, 4=Natalia, 5=Diego, 6=Sofia, 7=Paula
+
+
+/* =========================================================
+   3) PROFESORES (3 PROFESORES)
+   ========================================================= */
+PRINT '--- Insertando Profesores ---';
+
+INSERT INTO Profesores (IdPersona, Especialidad)
+VALUES
+    (4, 'Yoga y Pilates'),      -- Laura
+    (8, 'Musculacion'),         -- Martin
+    (10,'Spinning y Funcional');-- Andres
+GO
+-- IdProfesor: 1=Laura, 2=Martin, 3=Andres
+
+
+/* =========================================================
+   4) TIPOS DE PASE (TABLA Pase)
+   ========================================================= */
+PRINT '--- Insertando Tipos de Pase ---';
+
+INSERT INTO Pase (Nombre, Precio)
+VALUES
+    ('Pase Diario',        1500.00),   -- IDTipo 1
+    ('Pase Mensual',      10000.00),   -- IDTipo 2
+    ('Pase 8 Veces',       8000.00),   -- IDTipo 3
+    ('Pase Libre Trimestral', 25000.00); -- IDTipo 4
+GO
+
+
+/* =========================================================
+   5) PASES POR SOCIO (con fechas reales)
+   ========================================================= */
+
+INSERT INTO PasePorSocio
+    (IDSocio, IDTipo, FechaInicio, FechaFin, VecesMax, VecesUsadas, Estado, FechaCreacion)
+VALUES
+    -- Socio 1 (Juan): Pase Mensual vigente
+    (1, 2, '2025-10-10', '2025-12-10', NULL, 0, 1, '2025-10-10'),
+
+    -- Socio 2 (Maria): Pase 8 Veces, próximo a vencer
+    (2, 3, '2025-10-25', '2025-12-05', 8, 5, 1, '2025-10-25'),
+
+    -- Socio 3 (Carlos): Pase vencido
+    (3, 2, '2025-08-01', '2025-10-01', NULL, 0, 0, '2025-08-01'),
+
+    -- Socio 4 (Natalia): Pase Trimestral vigente
+    (4, 4, '2025-10-15', '2026-01-15', NULL, 3, 1, '2025-10-15'),
+
+    -- Socio 5 (Diego): Pase 8 veces casi agotado
+    (5, 3, '2025-11-01', '2025-12-01', 8, 7, 1, '2025-11-01'),
+
+    -- Socio 6 (Sofia): Pase Diario vencido
+    (6, 1, '2025-11-18', '2025-11-19', 1, 1, 0, '2025-11-18'),
+
+    -- Socio 7 (Paula): Pase Mensual próximo a vencer
+    (7, 2, '2025-10-20', '2025-11-22', NULL, 2, 1, '2025-10-20');
+GO
+
+
+
+/* =========================================================
+   6) HISTORIAL MEDICO 
+   ========================================================= */
+
+INSERT INTO HistorialMedico
+    (IdSocio, FechaControl, TipoControl, Resultado, Observaciones)
+VALUES
+    (1, '2025-09-20', 'Apto Fisico', 'Apto', 'Sin observaciones'),
+    (2, '2025-10-10', 'Apto Fisico', 'Apto', 'Control de rutina'),
+    (4, '2025-11-01', 'Apto Fisico', 'Apto', 'Recomendado cuidado de rodilla');
+GO
+
+/* =========================================================
+   7) CLASES MAESTRA
+   ========================================================= */
+PRINT '--- Insertando ClaseMaestra ---';
+
+INSERT INTO ClaseMaestra (Nombre, Descripcion, Activa)
+VALUES
+    ('Yoga',        'Clase de Yoga Hatha',          1), -- IdClaseMaestra 1
+    ('Spinning',    'Ciclismo indoor',              1), -- 2
+    ('Funcional',   'Entrenamiento funcional',      1), -- 3
+    ('Musculacion', 'Entrenamiento de fuerza',      1); -- 4
+GO
+
+
+/* =========================================================
+   8) CLASES INSTANCIA 
+   ========================================================= */
+PRINT '--- Insertando ClaseInstancia ---';
+
+-- Usamos fechas reales cercanas, por ejemplo de noviembre y diciembre de 2025:
+INSERT INTO ClaseInstancia
+    (IdClaseMaestra, Fecha,       HoraInicio, HoraFin, Cupo, IdProfesor, Activa)
+VALUES
+    (1, '2025-11-20', '18:00', '19:00',  2, 1, 1),  -- Yoga Jueves 20/11 (Cupo 2 para poder llenarla)
+    (2, '2025-11-21', '19:00', '20:00', 15, 3, 1),  -- Spinning Viernes
+    (3, '2025-11-22', '17:00', '18:00', 10, 3, 1),  -- Funcional Sabado
+    (4, '2025-11-23', '10:00', '11:00', 20, 2, 1);  -- Musculacion Domingo
+GO
+-- IdClase: 1,2,3,4
+
+
+/* =========================================================
+   9) INSCRIPCIONES (una clase llena para probar ClasesSinCupos)
+   ========================================================= */
+PRINT '--- Insertando Inscripciones ---';
+
+-- Clase 1 (Yoga, Cupo 2) -> la llenamos
+INSERT INTO Inscripciones (IDSocio, IdClaseInstancia, Estado)
+VALUES
+    (1, 1, 'Activa'),  -- Juan a Yoga
+    (2, 1, 'Activa');  -- Maria a Yoga (Clase 1 queda sin cupo)
+
+-- Clase 2 (Spinning) -> algunos inscriptos, pero no llena
+INSERT INTO Inscripciones (IDSocio, IdClaseInstancia, Estado)
+VALUES
+    (4, 2, 'Activa'),  -- Natalia a Spinning
+    (5, 2, 'Activa');  -- Diego a Spinning
+GO
+
+
+/* =========================================================
+   10) ASISTENCIAS (con fechas reales)
+   ========================================================= */
+
+-- Maria (Pase ID 2)
+INSERT INTO Asistencias (IdPase, FechaHoraIng)
+VALUES
+    (2, '2025-11-10 18:30'),
+    (2, '2025-11-12 18:45'),
+    (2, '2025-11-15 19:00');
+
+-- Juan (Pase ID 1)
+INSERT INTO Asistencias (IdPase, FechaHoraIng)
+VALUES
+    (1, '2025-11-18 17:59');
+
+-- Diego (Pase ID 5)
+INSERT INTO Asistencias (IdPase, FechaHoraIng)
+VALUES
+    (5, '2025-11-19 19:15');
+GO
 
 
